@@ -133,8 +133,8 @@ final class InsertElementInWire {
         return new Modifications.Builder<Circuit>(insertElement.toString())
                 .add(new ModifyDeleteWire(wire))
                 .add(insertElement)
-                .add(new ModifyInsertWire(new Wire(wire.p1, first.getPos())).checkIfLenZero())
-                .add(new ModifyInsertWire(new Wire(second.getPos(), wire.p2)).checkIfLenZero())
+                .add(new ModifyInsertWire(new Wire(wire.p1, first.getPos()).setColor(wire.getColor())).checkIfLenZero())
+                .add(new ModifyInsertWire(new Wire(second.getPos(), wire.p2).setColor(wire.getColor())).checkIfLenZero())
                 .build();
     }
 
