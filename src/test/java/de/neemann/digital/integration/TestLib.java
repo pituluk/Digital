@@ -37,6 +37,7 @@ public class TestLib extends TestCase {
     private void check(File dig) throws Exception {
         Circuit circuit = new ToBreakRunner(dig).getCircuit();
         boolean is74xx = !dig.getName().endsWith("-inc.dig") && dig.getPath().contains("DIL Chips");
+        boolean isNoPowerPins = dig.getPath().replace('\\', '/').contains("/74xx (no power pins)/");
 
         if (is74xx) {
             assertEquals("is not DIL", CustomCircuitShapeType.DIL, circuit.getAttributes().get(Keys.SHAPE_TYPE));
@@ -70,8 +71,13 @@ public class TestLib extends TestCase {
         }
 
         if (is74xx) {
-            assertTrue("GND is missing", pc.isGND);
-            assertTrue("VCC is missing", pc.isVCC);
+            if (isNoPowerPins) {
+                assertFalse("GND should not be present", pc.isGND);
+                assertFalse("VCC should not be present", pc.isVCC);
+            } else {
+                assertTrue("GND is missing", pc.isGND);
+                assertTrue("VCC is missing", pc.isVCC);
+            }
         }
     }
 
