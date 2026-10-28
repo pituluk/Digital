@@ -1,4 +1,4 @@
-[![Download](distribution/Download.svg)](https://github.com/hneemann/Digital/releases/latest/download/Digital.zip)
+[![Download](distribution/Download.svg)](https://github.com/pituluk/Digital/releases/download/release/Digital.zip)
 
 # Digital #
 

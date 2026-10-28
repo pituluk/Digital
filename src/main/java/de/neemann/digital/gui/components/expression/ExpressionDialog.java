@@ -48,8 +48,15 @@ public class ExpressionDialog extends JDialog {
         getContentPane().add(new JScrollPane(text), BorderLayout.CENTER);
         getContentPane().add(new JLabel(Lang.get("msg_enterAnExpression")), BorderLayout.NORTH);
 
+        JPanel bottom = new JPanel(new BorderLayout());
+        getContentPane().add(bottom, BorderLayout.SOUTH);
+
+        JCheckBox useSwitchesAndLeds = new JCheckBox(Lang.get("msg_builder_useSwitchesAndLeds"));
+        useSwitchesAndLeds.setToolTipText(Lang.get("msg_builder_useSwitchesAndLeds_tt"));
+        bottom.add(useSwitchesAndLeds, BorderLayout.WEST);
+
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        getContentPane().add(buttons, BorderLayout.SOUTH);
+        bottom.add(buttons, BorderLayout.EAST);
 
         buttons.add(new ToolTipAction(Lang.get("btn_help")) {
             @Override
@@ -67,7 +74,9 @@ public class ExpressionDialog extends JDialog {
             public void actionPerformed(ActionEvent e) {
                 try {
                     ArrayList<Expression> expList = new Parser(text.getText()).parse();
-                    CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory).setResolveLocalVars(true);
+                    CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory)
+                            .setResolveLocalVars(true)
+                            .setUseSwitchesAndLeds(useSwitchesAndLeds.isSelected());
                     if (expList.size() == 1)
                         circuitBuilder.addCombinatorial("Y", expList.get(0));
                     else

@@ -17,6 +17,7 @@ import de.neemann.digital.core.element.Rotation;
 import de.neemann.digital.core.flipflops.FlipflopD;
 import de.neemann.digital.core.flipflops.FlipflopJK;
 import de.neemann.digital.core.io.Const;
+import de.neemann.digital.core.io.DipSwitch;
 import de.neemann.digital.core.io.In;
 import de.neemann.digital.core.io.Out;
 import de.neemann.digital.core.io.Probe;
@@ -64,6 +65,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private int lutNumber;
     private boolean resolveLocalVars;
     private boolean wideShapes;
+    private boolean useSwitchesAndLeds;
 
 
     /**
@@ -144,6 +146,17 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     }
 
     /**
+     * Uses switches and LEDs instead of input and output pins
+     *
+     * @param useSwitchesAndLeds true to use switches and LEDs
+     * @return this for chained calls
+     */
+    public CircuitBuilder setUseSwitchesAndLeds(boolean useSwitchesAndLeds) {
+        this.useSwitchesAndLeds = useSwitchesAndLeds;
+        return this;
+    }
+
+    /**
      * Adds an expression to the circuit
      *
      * @param name       the output name
@@ -160,7 +173,8 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
 
         Fragment fr = createFragment(expression);
 
-        final FragmentVisualElement frag = new FragmentVisualElement(Out.DESCRIPTION, shapeFactory).setAttr(Keys.LABEL, name);
+        final FragmentVisualElement frag = new FragmentVisualElement(
+                useSwitchesAndLeds ? Out.LEDDESCRIPTION : Out.DESCRIPTION, shapeFactory).setAttr(Keys.LABEL, name);
         checkPinNumber(frag.getVisualElement());
 
         checkForLocalVars(expression);
@@ -395,11 +409,16 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
                         .set(Keys.ROTATE, new Rotation(1))
                         .set(Keys.NETNAME, v.getIdentifier());
             } else {
-                visualElement = new VisualElement(In.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
-                visualElement.getElementAttributes()
-                        .set(Keys.ROTATE, new Rotation(3))
-                        .set(Keys.LABEL, v.getIdentifier());
-                checkPinNumber(visualElement);
+                if (useSwitchesAndLeds) {
+                    visualElement = new VisualElement(DipSwitch.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
+                    visualElement.getElementAttributes().set(Keys.LABEL, v.getIdentifier());
+                } else {
+                    visualElement = new VisualElement(In.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
+                    visualElement.getElementAttributes()
+                            .set(Keys.ROTATE, new Rotation(3))
+                            .set(Keys.LABEL, v.getIdentifier());
+                    checkPinNumber(visualElement);
+                }
 
                 if (mai != null && mai.getStateSignalBitNames() != null && mai.getStateSignalBitNames().contains(v.getIdentifier())) {
                     VisualElement ve = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);

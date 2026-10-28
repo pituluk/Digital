@@ -117,6 +117,7 @@ public class TableDialog extends JDialog {
     private final Mouse mouse = Mouse.getMouse();
     private final UndoManager<TruthTable> undoManager;
     private JCheckBoxMenuItem createJK;
+    private JCheckBoxMenuItem useSwitchesAndLeds;
     private File filename;
     private int columnIndex;
     private ExpressionListenerStore lastGeneratedExpressions;
@@ -549,6 +550,11 @@ public class TableDialog extends JDialog {
 
     private JMenu createCreateMenu() {
         JMenu createMenu = new JMenu(Lang.get("menu_table_create"));
+        useSwitchesAndLeds = new JCheckBoxMenuItem(Lang.get("msg_builder_useSwitchesAndLeds"));
+        useSwitchesAndLeds.setToolTipText(Lang.get("msg_builder_useSwitchesAndLeds_tt"));
+        createMenu.add(useSwitchesAndLeds);
+        createMenu.addSeparator();
+
         createMenu.add(new ToolTipAction(Lang.get("menu_table_createCircuit")) {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
@@ -671,6 +677,7 @@ public class TableDialog extends JDialog {
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, undoManager.getActual().getVars())
                     .setUseJK(useJKff)
                     .setUseLUTs(useLUTs)
+                    .setUseSwitchesAndLeds(useSwitchesAndLeds.isSelected())
                     .setModelAnalyzerInfo(modelAnalyzerInfo);
             new BuilderExpressionCreator(circuitBuilder, modifier)
                     .setUseJKOptimizer(useJKff)
