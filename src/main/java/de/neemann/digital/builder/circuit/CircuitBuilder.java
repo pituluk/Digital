@@ -411,7 +411,9 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
             } else {
                 if (useSwitchesAndLeds) {
                     visualElement = new VisualElement(DipSwitch.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
-                    visualElement.getElementAttributes().set(Keys.LABEL, v.getIdentifier());
+                    visualElement.getElementAttributes()
+                    .set(Keys.LABEL, v.getIdentifier())
+                    .set(Keys.ROTATE, new Rotation(3));
                 } else {
                     visualElement = new VisualElement(In.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
                     visualElement.getElementAttributes()

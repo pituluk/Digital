@@ -1896,6 +1896,8 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="menu_scale">Skalierung setzen</string>
     <string name="menu_table_N_variables">{0} Variablen</string>
     <string name="menu_table_create">Erzeugen</string>
+    <string name="msg_builder_useSwitchesAndLeds">Verwenden Sie Schalter und LEDs anstelle von Ein-/Ausgangspins.</string>
+    <string name="msg_builder_useSwitchesAndLeds_tt">Erzeuge interaktive Schaltereingaben und LED-Ausgaben.</string>
     <string name="menu_table_createCUPL_tt">Erzeugt eine CUPL Quelldatei welche die Schaltung beschreibt.</string>
     <string name="menu_table_createTT2_tt">Erzeugt eine dem Berkeley Logic Interchange Format (BLIF) ähnliche Beschreibung der Logik.
         Danach wird der Atmel-Fitter gestartet, um daraus die JEDEC Datei zu erzeugen.</string>
