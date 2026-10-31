@@ -103,6 +103,10 @@ public class FragmentVisualElement implements Fragment {
             mm.check(p);
         for (Vector p : outputs)
             mm.check(p);
+
+        if (!mm.isValid())
+            return new Box(0, 0);
+
         Vector delta = mm.getMax().sub(mm.getMin());
         if (visualElement.equalsDescription(FlipflopJK.DESCRIPTION)
                 || visualElement.equalsDescription(FlipflopD.DESCRIPTION))

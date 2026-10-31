@@ -61,6 +61,9 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private boolean useLUT;
     private boolean useJKff;
     private boolean useDWithConst;
+    private boolean use74xx;
+    private final LinkedHashMap<String, Expression> combinatorialExpressions74xx = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Expression> sequentialExpressions74xx = new LinkedHashMap<>();
     private ModelAnalyserInfo mai;
     private int lutNumber;
     private boolean resolveLocalVars;
@@ -133,7 +136,16 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         this.useLUT = useLUT;
         return this;
     }
-
+    /**
+     * Enables the usage of DILs
+     *
+     * @param use74xx true if DILs should be used
+     * @return this for chained calls
+     */
+    public CircuitBuilder setUse74xx(boolean use74xx) {
+        this.use74xx = use74xx;
+        return this;
+    }
     /**
      * Enables wide shapes
      *
@@ -171,6 +183,12 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
             expression = ((NamedExpression) expression).getExpression();
         }
 
+        if (use74xx) {
+            combinatorialExpressions74xx.put(name, expression);
+            expression.traverse(variableVisitor);
+            return this;
+        }
+
         Fragment fr = createFragment(expression);
 
         final FragmentVisualElement frag = new FragmentVisualElement(
@@ -205,6 +223,13 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
      */
     @Override
     public CircuitBuilder addSequential(String name, Expression expression) throws BuilderException {
+        if (use74xx) {
+            sequentialExpressions74xx.put(name, expression);
+            sequentialVars.add(new Variable(name));
+            expression.traverse(variableVisitor);
+            return this;
+        }
+
         boolean useDff = true;
         long initValue = 0;
         if (mai != null)
@@ -335,10 +360,19 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
                 return false;
         return true;
     }
-
     private Fragment createBasicFragment(Expression expression) throws BuilderException {
         if (expression instanceof Operation) {
             Operation op = (Operation) expression;
+            if (op.getExpressions().isEmpty()) {
+                if (op instanceof Operation.And)
+                    return new FragmentVisualElement(Const.DESCRIPTION, shapeFactory).setAttr(Keys.VALUE, 1L);
+                else if (op instanceof Operation.Or)
+                    return new FragmentVisualElement(Const.DESCRIPTION, shapeFactory).setAttr(Keys.VALUE, 0L);
+                else if (op instanceof Operation.XOr)
+                    return new FragmentVisualElement(Const.DESCRIPTION, shapeFactory).setAttr(Keys.VALUE, 0L);
+                else
+                    return new FragmentVisualElement(Const.DESCRIPTION, shapeFactory).setAttr(Keys.VALUE, 0L);
+            }
             ArrayList<Fragment> frags = getOperationFragments(op);
             if (op instanceof Operation.And)
                 return new FragmentExpression(frags,
@@ -485,6 +519,21 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
      * @return the circuit
      */
     public Circuit createCircuit() {
+        if (use74xx) {
+            try {
+                return new CircuitBuilder74xx(
+                        shapeFactory,
+                        desiredVarOrdering,
+                        combinatorialExpressions74xx,
+                        sequentialExpressions74xx,
+                        useSwitchesAndLeds,
+                        mai
+                ).createCircuit();
+            } catch (BuilderException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         if (resolveLocalVars)
             resolveLocalVars();
 

@@ -57,6 +57,11 @@ public class FragmentExpression implements Fragment {
     }
 
     private Box doLayoutNormal() {
+        if (fragments.isEmpty()) {
+            Box mergerBox = merger.doLayout();
+            return new Box(mergerBox.getWidth(), mergerBox.getHeight());
+        }
+
         ArrayList<ConstExpression> constExpr = new ArrayList<>();
         int height = 0;
         int width = 0;
@@ -89,12 +94,10 @@ public class FragmentExpression implements Fragment {
         int centerIndex = fragments.size() / 2;
         int y;
         if ((fragments.size() & 1) == 0) {
-            // even number of inputs
             int y1 = fragments.get(centerIndex - 1).fragment.getOutputs().get(0).y;
             int y2 = fragments.get(centerIndex).fragment.getOutputs().get(0).y;
             y = raster((y1 + y2) / 2) - centerIndex * SIZE;
         } else {
-            // odd number of inputs
             y = fragments.get(centerIndex).fragment.getOutputs().get(0).y - centerIndex * SIZE;
         }
         merger.setPos(new Vector(width, y));

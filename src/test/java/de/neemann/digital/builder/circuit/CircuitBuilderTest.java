@@ -42,6 +42,7 @@ import java.util.List;
 import static de.neemann.digital.analyse.expression.Not.not;
 import static de.neemann.digital.analyse.expression.Operation.and;
 import static de.neemann.digital.analyse.expression.Operation.or;
+import static de.neemann.digital.analyse.expression.Operation.xor;
 
 /**
  *
@@ -354,5 +355,98 @@ public class CircuitBuilderTest extends TestCase {
         te.check(1, 1, 0, 1, 0);
         te.check(1, 1, 1, 0, 0);
         te.check(1, 1, 1, 1, 0);
+    }
+
+    public void testBuilder74xx() throws Exception {
+        Variable a = new Variable("a");
+        Variable b = new Variable("b");
+        Variable c = new Variable("c");
+        Variable d = new Variable("d");
+
+        // y1 = a & b, y2 = c & d, y = y1 | y2 | ~a
+        // Needs 2 ANDs (packed into 1 7408), 2 ORs (packed into 1 7432), 1 NOT (1 7404)
+        Expression y1 = and(a, b);
+        Expression y2 = and(c, d);
+        Expression y = or(y1, y2, not(a));
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addCombinatorial("y", y)
+                .createCircuit();
+
+        // Verify chips: exactly 1 7408 (packing both ANDs), 1 7432 (packing both ORs), 1 7404
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7408")).size());
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7432")).size());
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7404")).size());
+
+        ModelCreator m = new ModelCreator(circuit, library);
+        TestExecuter te = new TestExecuter(m.createModel(false)).setUp(m);
+        // a=0, b=0, c=0, d=0 -> ~a=1 => y=1
+        te.check(0, 0, 0, 0, 1);
+        // a=1, b=0, c=0, d=0 -> y=0
+        te.check(1, 0, 0, 0, 0);
+        // a=1, b=1, c=0, d=0 -> a&b=1 => y=1
+        te.check(1, 1, 0, 0, 1);
+        // a=1, b=0, c=1, d=1 -> c&d=1 => y=1
+        te.check(1, 0, 1, 1, 1);
+    }
+
+    public void testBuilder74xxPacking() throws Exception {
+        Variable a = new Variable("a");
+        Variable b = new Variable("b");
+        // 5 AND gates => requires 2 7408 chips (slot capacity is 4)
+        Expression e1 = and(a, b);
+        Expression e2 = and(a, b);
+        Expression e3 = and(a, b);
+        Expression e4 = and(a, b);
+        Expression e5 = and(a, b);
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addCombinatorial("o1", e1)
+                .addCombinatorial("o2", e2)
+                .addCombinatorial("o3", e3)
+                .addCombinatorial("o4", e4)
+                .addCombinatorial("o5", e5)
+                .createCircuit();
+
+        assertEquals(2, circuit.getElements(v -> v.getElementName().contains("7408")).size());
+    }
+
+    public void testBuilder74xxGates() throws Exception {
+        Variable a = new Variable("a");
+        Variable b = new Variable("b");
+
+        Expression nand = not(and(a, b));
+        Expression nor = not(or(a, b));
+        Expression xor = xor(a, b);
+        Expression xnor = not(xor(a, b));
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addCombinatorial("nand", nand)
+                .addCombinatorial("nor", nor)
+                .addCombinatorial("xor", xor)
+                .addCombinatorial("xnor", xnor)
+                .createCircuit();
+
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7400")).size());
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7402")).size());
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("7486")).size());
+        assertEquals(1, circuit.getElements(v -> v.getElementName().contains("747266")).size());
+
+        ModelCreator m = new ModelCreator(circuit, library);
+        TestExecuter te = new TestExecuter(m.createModel(false)).setUp(m);
+        // a=0, b=0 => nand=1, nor=1, xor=0, xnor=1
+        te.check(0, 0, 1, 1, 0, 1);
+        // a=0, b=1 => nand=1, nor=0, xor=1, xnor=0
+        te.check(0, 1, 1, 0, 1, 0);
+        // a=1, b=0 => nand=1, nor=0, xor=1, xnor=0
+        te.check(1, 0, 1, 0, 1, 0);
+        // a=1, b=1 => nand=0, nor=0, xor=0, xnor=1
+        te.check(1, 1, 0, 0, 0, 1);
     }
 }

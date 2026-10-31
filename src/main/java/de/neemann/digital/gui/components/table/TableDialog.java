@@ -566,16 +566,23 @@ public class TableDialog extends JDialog {
         createSpecial.add(new ToolTipAction(Lang.get("menu_table_createCircuitJK")) {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
-                createCircuit(true, false, ExpressionModifier.IDENTITY);
+                createCircuit(true, false, false, ExpressionModifier.IDENTITY);
             }
         }.setToolTip(Lang.get("menu_table_createCircuitJK_tt")).createJMenuItem());
 
         createSpecial.add(new ToolTipAction(Lang.get("menu_table_createCircuitLUT")) {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
-                createCircuit(false, true, ExpressionModifier.IDENTITY);
+                createCircuit(false, true, false, ExpressionModifier.IDENTITY);
             }
         }.setToolTip(Lang.get("menu_table_createCircuitLUT_tt")).createJMenuItem());
+
+        createSpecial.add(new ToolTipAction(Lang.get("menu_table_createCircuit74xx")) {
+            @Override
+            public void actionPerformed(ActionEvent actionEvent) {
+                createCircuit(false, false, true, new NInputs(2));
+            }
+        }.setToolTip(Lang.get("menu_table_createCircuit74xx_tt")).createJMenuItem());
 
         createSpecial.add(new ToolTipAction(Lang.get("menu_table_createNAnd")) {
             @Override
@@ -609,14 +616,12 @@ public class TableDialog extends JDialog {
                 }
             }.setToolTip(Lang.get("menu_table_createNAndTwo_tt")).createJMenuItem());
 
-
             createSpecial.add(new ToolTipAction(Lang.get("menu_table_createNOrTwo")) {
                 @Override
                 public void actionPerformed(ActionEvent actionEvent) {
                     createCircuit(new NInputs(2), new NOr());
                 }
             }.setToolTip(Lang.get("menu_table_createNOrTwo_tt")).createJMenuItem());
-
         }
         createMenu.add(createSpecial);
 
@@ -668,16 +673,17 @@ public class TableDialog extends JDialog {
     }
 
     private void createCircuit(ExpressionModifier... modifier) {
-        createCircuit(false, false, modifier);
+        createCircuit(false, false, false, modifier);
     }
 
-    private void createCircuit(boolean useJKff, boolean useLUTs, ExpressionModifier... modifier) {
+    private void createCircuit(boolean useJKff, boolean useLUTs, boolean use74xx, ExpressionModifier... modifier) {
         try {
             final ModelAnalyserInfo modelAnalyzerInfo = undoManager.getActual().getModelAnalyzerInfo();
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, undoManager.getActual().getVars())
                     .setUseJK(useJKff)
                     .setUseLUTs(useLUTs)
-                    .setUseSwitchesAndLeds(useSwitchesAndLeds.isSelected())
+                    .setUse74xx(use74xx)
+                    .setUseSwitchesAndLeds(useSwitchesAndLeds != null && useSwitchesAndLeds.isSelected())
                     .setModelAnalyzerInfo(modelAnalyzerInfo);
             new BuilderExpressionCreator(circuitBuilder, modifier)
                     .setUseJKOptimizer(useJKff)

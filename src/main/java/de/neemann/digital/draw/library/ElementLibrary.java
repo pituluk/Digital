@@ -76,6 +76,10 @@ public class ElementLibrary implements Iterable<ElementLibrary.ElementContainer>
         if (path.endsWith("Digital.jar"))
             return new File(path.substring(0, path.length() - 12) + "/lib");
 
+        File defaultLib = new File("src/main/dig/lib");
+        if (defaultLib.exists())
+            return toCanonical(defaultLib);
+
         return new File("noLibFound");
     }
 
@@ -456,6 +460,12 @@ public class ElementLibrary implements Iterable<ElementLibrary.ElementContainer>
             node = map.get(elementName);
             if (node != null)
                 return node.getDescription();
+
+            if (!elementName.endsWith(".dig")) {
+                node = map.get(elementName + ".dig");
+                if (node != null)
+                    return node.getDescription();
+            }
 
             if (rootLibraryPath == null)
                 throw new ElementNotFoundException(Lang.get("err_fileNeedsToBeSaved"));
