@@ -40,8 +40,7 @@ import java.util.ArrayList;
 import static de.neemann.digital.gui.components.EditorFactory.addF1Traversal;
 
 /**
- * Dialog to enter an expression.
- * Creates a new frame with a circuit generated from the entered expression.
+ * Dialog to enter an expression and create a circuit from it.
  */
 public class ExpressionDialog extends JDialog {
 

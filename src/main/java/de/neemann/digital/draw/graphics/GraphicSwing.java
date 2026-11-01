@@ -11,6 +11,7 @@ import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Path2D;
+import java.awt.geom.Rectangle2D;
 
 /**
  * Used to draw on a {@link Graphics2D} instance.
@@ -79,6 +80,19 @@ public class GraphicSwing extends Graphic {
     public void drawLine(VectorInterface p1, VectorInterface p2, Style style) {
         applyStyle(style);
         gr.drawLine(p1.getX(), p1.getY(), p2.getX(), p2.getY());
+    }
+
+    @Override
+    public boolean isVisible(VectorInterface min, VectorInterface max) {
+        Shape clip = gr.getClip();
+        if (clip == null)
+            return true;
+
+        Rectangle2D bounds = clip.getBounds2D();
+        return min.getX() <= bounds.getMaxX()
+                && max.getX() >= bounds.getMinX()
+                && min.getY() <= bounds.getMaxY()
+                && max.getY() >= bounds.getMinY();
     }
 
     @Override

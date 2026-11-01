@@ -34,6 +34,17 @@ public abstract class Graphic implements Closeable {
     }
 
     /**
+     * Checks whether a bounding box intersects the visible area.
+     *
+     * @param min upper left corner of the bounding box
+     * @param max lower right corner of the bounding box
+     * @return true if the bounding box may be visible
+     */
+    public boolean isVisible(VectorInterface min, VectorInterface max) {
+        return true;
+    }
+
+    /**
      * Draws a line
      *
      * @param p1    first point

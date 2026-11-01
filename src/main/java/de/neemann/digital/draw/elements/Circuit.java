@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static de.neemann.digital.core.element.PinInfo.input;
+import static de.neemann.digital.draw.shapes.GenericShape.SIZE;
 
 /**
  * This class contains all the visual elements which form the visual representation of a circuit.
@@ -319,14 +320,18 @@ public class Circuit implements Copyable<Circuit> {
         // after that draw the model which is rather slow
         graphic.openGroup();
         for (Wire w : wires)
-            w.drawTo(graphic, highLighted.contains(w) ? highlight : null);
+            if (graphic.isVisible(Vector.min(w.p1, w.p2).add(-SIZE, -SIZE), Vector.max(w.p1, w.p2).add(SIZE, SIZE)))
+                w.drawTo(graphic, highLighted.contains(w) ? highlight : null);
         dotCreator.drawTo(graphic, highLighted);
         graphic.closeGroup();
         for (VisualElement ve : visualElements) {
             if (!presentationMode || !hideInPresentationMode(ve)) {
-                graphic.openGroup();
-                ve.drawTo(graphic, highLighted.contains(ve) ? highlight : null);
-                graphic.closeGroup();
+                GraphicMinMax bounds = ve.getMinMax(true);
+                if (!bounds.isValid() || graphic.isVisible(bounds.getMin().add(-SIZE, -SIZE), bounds.getMax().add(SIZE, SIZE))) {
+                    graphic.openGroup();
+                    ve.drawTo(graphic, highLighted.contains(ve) ? highlight : null);
+                    graphic.closeGroup();
+                }
             }
         }
     }

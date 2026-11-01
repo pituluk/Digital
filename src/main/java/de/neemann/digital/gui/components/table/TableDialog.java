@@ -40,6 +40,7 @@ import de.neemann.digital.gui.Main;
 import de.neemann.digital.gui.SaveAsHelper;
 import de.neemann.digital.gui.components.AttributeDialog;
 import de.neemann.digital.gui.components.ElementOrderer;
+import de.neemann.digital.gui.components.expression.ExpressionToTruthTable;
 import de.neemann.digital.gui.components.karnaugh.KarnaughMapDialog;
 import de.neemann.digital.gui.components.table.hardware.GenerateCUPL;
 import de.neemann.digital.gui.components.table.hardware.GenerateFile;
@@ -105,6 +106,8 @@ public class TableDialog extends JDialog {
 
     private final ExpressionComponent statusBar;
     private final JTable table;
+    private final JTabbedPane tabs;
+    private JCheckBox showSimplifiedTruthTable;
     private final Font font;
     private final ElementLibrary library;
     private final ShapeFactory shapeFactory;
@@ -122,6 +125,9 @@ public class TableDialog extends JDialog {
     private int columnIndex;
     private ExpressionListenerStore lastGeneratedExpressions;
     private JMenuItem lastUsedGenratorMenuItem;
+    private TruthTable originalExpressionTable;
+    private TruthTable simplifiedExpressionTable;
+    private boolean showingSimplifiedExpressionTable;
 
     /**
      * Creates a new instance
@@ -154,12 +160,9 @@ public class TableDialog extends JDialog {
         table.getTableHeader().setDefaultRenderer(new StringDefaultTableCellRenderer());
         table.setRowHeight(font.getSize() * 6 / 5);
 
-        table.getInputMap().put(KeyStroke.getKeyStroke("0"), "0_ACTION");
-        table.getActionMap().put("0_ACTION", new SetAction(0));
-        table.getInputMap().put(KeyStroke.getKeyStroke("1"), "1_ACTION");
-        table.getActionMap().put("1_ACTION", new SetAction(1));
-        table.getInputMap().put(KeyStroke.getKeyStroke("X"), "X_ACTION");
-        table.getActionMap().put("X_ACTION", new SetAction(2));
+        setupTableInput();
+
+        tabs = createTabs();
 
         new TableReorderManager(this, table);
 
@@ -306,10 +309,32 @@ public class TableDialog extends JDialog {
         karnaughMenuAction.setEnabled(undoManager.getActual().getVars().size() <= 4);
         calculateExpressions();
 
-        getContentPane().add(new JScrollPane(table));
-        getContentPane().add(statusBar, BorderLayout.SOUTH);
+        getContentPane().add(tabs);
         pack();
         setLocationRelativeTo(parent);
+    }
+
+    private JTabbedPane createTabs() {
+        JTabbedPane tabbedPane = new JTabbedPane();
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        showSimplifiedTruthTable = new JCheckBox(Lang.get("msg_showSimplifiedTruthTable"));
+        showSimplifiedTruthTable.setVisible(false);
+        showSimplifiedTruthTable.addActionListener(event -> showExpressionTable(showSimplifiedTruthTable.isSelected()));
+        tablePanel.add(showSimplifiedTruthTable, BorderLayout.NORTH);
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        tablePanel.add(statusBar, BorderLayout.SOUTH);
+        tabbedPane.addTab(Lang.get("win_table"), tablePanel);
+        tabbedPane.addTab(Lang.get("expression"), createExpressionTab());
+        return tabbedPane;
+    }
+
+    private void setupTableInput() {
+        table.getInputMap().put(KeyStroke.getKeyStroke("0"), "0_ACTION");
+        table.getActionMap().put("0_ACTION", new SetAction(0));
+        table.getInputMap().put(KeyStroke.getKeyStroke("1"), "1_ACTION");
+        table.getActionMap().put("1_ACTION", new SetAction(1));
+        table.getInputMap().put(KeyStroke.getKeyStroke("X"), "X_ACTION");
+        table.getActionMap().put("X_ACTION", new SetAction(2));
     }
 
     /**
@@ -406,6 +431,7 @@ public class TableDialog extends JDialog {
                     try {
                         File file = fc.getSelectedFile();
                         TruthTable truthTable = TruthTable.readFromFile(file);
+                        clearExpressionTableViews();
                         undoManager.setInitial(truthTable);
                         model.setOriginal(null);
                         tableChanged();
@@ -644,6 +670,67 @@ public class TableDialog extends JDialog {
         return createMenu;
     }
 
+    private JPanel createExpressionTab() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        JLabel explanation = new JLabel(Lang.get("msg_truthTableExpressionNote"));
+        JTextArea expression = new JTextArea("(C ∨ B) ∧ (A ∨ C) ∧ (B ∨ !C) * (C + !A)", 5, 40);
+        expression.setLineWrap(true);
+        expression.setWrapStyleWord(true);
+        panel.add(explanation, BorderLayout.NORTH);
+        panel.add(new JScrollPane(expression), BorderLayout.CENTER);
+
+        JButton create = new JButton(Lang.get("btn_create"));
+        create.addActionListener(event -> createTableFromExpression(expression.getText()));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttons.add(create);
+        panel.add(buttons, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private void createTableFromExpression(String source) {
+        try {
+            ArrayList<Expression> expressions = new de.neemann.digital.analyse.parser.Parser(source).parse();
+            originalExpressionTable = ExpressionToTruthTable.create(expressions, false);
+            simplifiedExpressionTable = ExpressionToTruthTable.create(expressions, true);
+            showingSimplifiedExpressionTable = false;
+            showSimplifiedTruthTable.setSelected(false);
+            showSimplifiedTruthTable.setVisible(true);
+            undoManager.setInitial(originalExpressionTable.createDeepCopy());
+            model.setOriginal(null);
+            tableChanged();
+            tabs.setSelectedIndex(0);
+        } catch (IOException | de.neemann.digital.analyse.parser.ParseException | ExpressionException e) {
+            new ErrorMessage().addCause(e).show(TableDialog.this);
+        }
+    }
+
+    private void clearExpressionTableViews() {
+        originalExpressionTable = null;
+        simplifiedExpressionTable = null;
+        showingSimplifiedExpressionTable = false;
+        showSimplifiedTruthTable.setSelected(false);
+        showSimplifiedTruthTable.setVisible(false);
+    }
+
+    private void showExpressionTable(boolean showSimplified) {
+        if (originalExpressionTable == null || simplifiedExpressionTable == null
+                || showSimplified == showingSimplifiedExpressionTable)
+            return;
+
+        if (showingSimplifiedExpressionTable)
+            simplifiedExpressionTable = undoManager.getActual().createDeepCopy();
+        else
+            originalExpressionTable = undoManager.getActual().createDeepCopy();
+
+        showingSimplifiedExpressionTable = showSimplified;
+        TruthTable selected = showSimplified ? simplifiedExpressionTable : originalExpressionTable;
+        undoManager.setInitial(selected.createDeepCopy());
+        model.setOriginal(null);
+        tableChanged();
+    }
+
     private void register(JMenu hardware, final HardwareDescriptionGenerator generator) {
         availGenerators.put(generator.getMenuPath(), generator);
         JMenu m = hardware;
@@ -678,8 +765,18 @@ public class TableDialog extends JDialog {
 
     private void createCircuit(boolean useJKff, boolean useLUTs, boolean use74xx, ExpressionModifier... modifier) {
         try {
-            final ModelAnalyserInfo modelAnalyzerInfo = undoManager.getActual().getModelAnalyzerInfo();
-            CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, undoManager.getActual().getVars())
+            TruthTable actualTable = undoManager.getActual();
+            TruthTable circuitTable = simplifiedExpressionTable == null
+                    ? actualTable
+                    : simplifiedExpressionTable;
+            ExpressionListenerStore circuitExpressions = lastGeneratedExpressions;
+            if (circuitTable != actualTable) {
+                circuitExpressions = new ExpressionListenerStore(null);
+                new ExpressionCreator(circuitTable).create(circuitExpressions);
+            }
+
+            final ModelAnalyserInfo modelAnalyzerInfo = circuitTable.getModelAnalyzerInfo();
+            CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, circuitTable.getVars())
                     .setUseJK(useJKff)
                     .setUseLUTs(useLUTs)
                     .setUse74xx(use74xx)
@@ -687,7 +784,7 @@ public class TableDialog extends JDialog {
                     .setModelAnalyzerInfo(modelAnalyzerInfo);
             new BuilderExpressionCreator(circuitBuilder, modifier)
                     .setUseJKOptimizer(useJKff)
-                    .create(lastGeneratedExpressions);
+                    .create(circuitExpressions);
             Circuit circuit = circuitBuilder.createCircuit();
 
             new Main.MainBuilder()
@@ -696,7 +793,7 @@ public class TableDialog extends JDialog {
                     .setCircuit(circuit)
                     .setBaseFileName(filename)
                     .openLater();
-        } catch (ExpressionException | FormatterException | RuntimeException e) {
+        } catch (AnalyseException | ExpressionException | FormatterException | RuntimeException e) {
             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
         }
     }
@@ -821,6 +918,7 @@ public class TableDialog extends JDialog {
 
         @Override
         public void actionPerformed(ActionEvent actionEvent) {
+            clearExpressionTableViews();
             undoManager.setInitial(new TruthTable(n).addResult());
             model.setOriginal(null);
             tableChanged();
@@ -851,6 +949,7 @@ public class TableDialog extends JDialog {
                 i--;
             }
 
+            clearExpressionTableViews();
             undoManager.setInitial(truthTable);
             model.setOriginal(null);
             tableChanged();
@@ -886,6 +985,7 @@ public class TableDialog extends JDialog {
                 i--;
             }
 
+            clearExpressionTableViews();
             undoManager.setInitial(truthTable);
             model.setOriginal(null);
             tableChanged();

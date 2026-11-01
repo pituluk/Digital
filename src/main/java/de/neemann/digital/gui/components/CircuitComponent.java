@@ -956,6 +956,7 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
                 gr2.drawString(Lang.get("menu_presentationMode"), 4, getHeight() - 4);
             }
 
+            gr2.setClip(0, 0, getWidth(), getHeight());
             gr2.transform(transform);
 
             long time = System.currentTimeMillis();

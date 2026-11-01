@@ -1497,6 +1497,8 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_restartNeeded">Reinicialização é necessária para que as mudanças possam ter efeito!</string>
   <string name="msg_remoteUnknownCommand">Comando {0} desconhecido!</string>
   <string name="msg_enterAnExpression">Entrar com uma expressão:</string>
+  <string name="msg_showSimplifiedTruthTable">Mostrar tabela-verdade simplificada</string>
+  <string name="msg_truthTableExpressionNote">A expressão mostrada abaixo é simplificada independentemente desta tabela.</string>
   <string name="msg_runningTestError">Erro ao executar os testes:</string>
   <string name="msg_testResult">Resultado de teste</string>
   <string name="msg_test_N_Passed">{0} com êxito</string>

@@ -1613,6 +1613,8 @@ In the file howTo.md you can find more details about translations.
     <string name="msg_pins">Assegnazione Pin</string>
     <string name="msg_restartNeeded">Un riavvio è richiesto per applicare le modifiche!</string>
     <string name="msg_enterAnExpression">Inserisci un'espressione:</string>
+    <string name="msg_showSimplifiedTruthTable">Mostra la tabella della verità semplificata</string>
+    <string name="msg_truthTableExpressionNote">L'espressione mostrata sotto viene semplificata indipendentemente da questa tabella.</string>
     <string name="msg_runningTestError">Errore durante l'esecuzione dei test:</string>
     <string name="msg_testResult">Risultato dei test</string>
     <string name="msg_test_N_Passed">{0} passati</string>

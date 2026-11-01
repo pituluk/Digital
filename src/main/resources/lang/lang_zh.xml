@@ -830,6 +830,8 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_pinMap_pin_N_is_N">管脚 {0}: {1}</string>
   <string name="msg_restartNeeded">当前更改需要重启生效！</string>
   <string name="msg_enterAnExpression">输入表达式：</string>
+  <string name="msg_showSimplifiedTruthTable">显示简化后的真值表</string>
+  <string name="msg_truthTableExpressionNote">下方显示的表达式会独立于此表进行简化。</string>
   <string name="msg_runningTestError">运行测试时遇到错误：</string>
   <string name="msg_testResult">测试结果</string>
   <string name="msg_test_N_Passed">{0} 通过</string>

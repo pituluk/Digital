@@ -17,6 +17,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
+import static de.neemann.digital.draw.shapes.GenericShape.SIZE;
+
 /**
  * Is used to create the dots to visualize the connections between wires.
  * Each {@link Wire} has two flags to decide which end of the wire needs to be marked with a dot.
@@ -106,6 +108,9 @@ public class DotCreator {
         }
 
         private void drawTo(Graphic graphic) {
+            if (!graphic.isVisible(vector.add(-SIZE, -SIZE), vector.add(SIZE, SIZE)))
+                return;
+
             ArrayList<Direction> directions = new ArrayList<>();
             for (Wire wire : wires) {
                 Vector other = wire.p1.equals(vector) ? wire.p2 : wire.p1;
