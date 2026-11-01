@@ -40,7 +40,7 @@ public final class CheckForNewRelease {
 
         Thread thread = new Thread(() -> {
             String runningRev = InfoDialog.getInstance().getRevision();
-            if (runningRev.equals(InfoDialog.UNKNOWN) || runningRev.length() > 7) return;
+            if (runningRev.equals(InfoDialog.UNKNOWN)) return;
 
             try {
                 ReleaseInfo info = new ReleaseInfo();
@@ -54,7 +54,7 @@ public final class CheckForNewRelease {
 
                     PREFS.put(PREF_ASKED, latestRev);
 
-                    if (runningRev.equals(latestRev))
+                    if (isRunningVersionCurrentOrNewer(runningRev, latestRev))
                         return;
 
                     SwingUtilities.invokeLater(() -> anInterface.showMessage(latestRev));
@@ -65,6 +65,10 @@ public final class CheckForNewRelease {
         });
         thread.setDaemon(true);
         thread.start();
+    }
+
+    static boolean isRunningVersionCurrentOrNewer(String runningRev, String latestRev) {
+        return runningRev.equals(latestRev) || runningRev.startsWith(latestRev + "-");
     }
 
     /**

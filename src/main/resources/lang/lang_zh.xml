@@ -810,8 +810,8 @@ In the file howTo.md you can find more details about translations.
       <p>一个简单的数字电路仿真器</p>
       <p>作者： H. Neemann  2016-2023</p>
       <p>所用图标来自 <a href="http://tango.freedesktop.org">Tango Desktop Project</a></p>
-      <p>在 <a href="https://github.com/hneemann/[[name]]">GitHub</a> 查看该项目，并<a href="https://github.com/hneemann/[[name]]/releases/latest">下载</a>最新的发行版</p>
-      <p>可以在这里提交<a href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">问题</a>或<a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">建议</a></p>]]></string>
+      <p>在 <a href="https://github.com/pituluk/Digital">GitHub</a> 查看该项目，并<a href="https://github.com/pituluk/Digital/releases/latest">下载</a>最新的发行版</p>
+      <p>可以在这里提交<a href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">问题</a>或<a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">建议</a></p>]]></string>
   <string name="msg_N_nodes">{0} 结点</string>
   <string name="msg_analyseErr">分析电路时遇到错误</string>
   <string name="msg_color">颜色</string>
@@ -1134,9 +1134,9 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_newRelease_N">&lt;html&gt;
         &lt;h1&gt;新版本 {0} 可用&lt;/h1&gt;
         &lt;p&gt;发现新的仿真器&lt;/p&gt;
-        &lt;p&gt;在这里 &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;发行说明&lt;/a&gt;
+        &lt;p&gt;在这里 &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;发行说明&lt;/a&gt;
         你可以查看有哪些功能变更。&lt;/p&gt;
-        &lt;p&gt;也可以直接 &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;下载&lt;/a&gt; 最新版本&lt;/p&gt;
+        &lt;p&gt;也可以直接 &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;下载&lt;/a&gt; 最新版本&lt;/p&gt;
         &lt;/html&gt;</string>
   <string name="key_stateValues_tt">定义输出值。简单的如 "A=1, B=0"，多位输出，如 "A=101"。
       未定义的输出状态默认为 0。在状态转换中，为指定的输出保持不变。</string>

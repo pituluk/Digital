@@ -2058,12 +2058,12 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
         <p>Ein einfacher Simulator für digitale Schaltkreise.</p>
         <p>Geschrieben von H. Neemann 2016-2023</p>
         <p>Die Icons stammen aus dem <a href="http://tango.freedesktop.org">Tango Desktop Project</a>.</p>
-        <p>Besuche das Projekt auf <a href="https://github.com/hneemann/[[name]]">GitHub</a>.
+        <p>Besuche das Projekt auf <a href="https://github.com/pituluk/Digital">GitHub</a>.
         Die jeweils neueste Version steht dort ebenfalls zum
-        <a href="https://github.com/hneemann/[[name]]/releases/latest">Download</a> bereit.</p>
-        <p>Per GitHub kann auch ein <a href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">Fehler</a>
+        <a href="https://github.com/pituluk/Digital/releases/latest">Download</a> bereit.</p>
+        <p>Per GitHub kann auch ein <a href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">Fehler</a>
         gemeldet oder
-        eine <a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">Verbesserung</a>
+        eine <a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">Verbesserung</a>
         vorgeschlagen werden.</p>]]>
     </string>
     <string name="msg_N_nodes">{0} aktive Elemente</string>
@@ -2275,9 +2275,9 @@ Stellen Sie sicher, dass der Flash-Vorgang abgeschlossen ist, bevor Sie diesen D
         <html>
         <h1>Neue Version {0} verfügbar</h1>
         <p>Es ist eine neue Version des Simulators verfügbar.</p>
-        <p>In den <a href="https://github.com/hneemann/[[name]]/releases/latest">Release Notes</a>
+        <p>In den <a href="https://github.com/pituluk/Digital/releases/latest">Release Notes</a>
         können Sie nachlesen, was sich in der Version {0} verändert hat.</p>
-        <p>Hier geht es zum <a href="https://github.com/hneemann/[[name]]/releases/latest">Download</a>.</p>
+        <p>Hier geht es zum <a href="https://github.com/pituluk/Digital/releases/latest">Download</a>.</p>
         </html>
     ]]></string>
 

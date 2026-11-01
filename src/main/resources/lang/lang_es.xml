@@ -1408,13 +1408,13 @@ In the file howTo.md you can find more details about translations.
       <p>Un sencillo simulador para circuitos digitales.</p>
       <p>Escrito por H. Neemann entre 2016-2023.</p>
       <p>Los iconos se han tomado de <a href="http://tango.freedesktop.org">Tango Desktop Project</a>.</p>
-      <p>Visita el proyecto en la dirección <a href="https://github.com/hneemann/[[name]]">GitHub</a>.
-      También disponible en GitHub <a href="https://github.com/hneemann/[[name]]/releases/latest">descarga</a>
+      <p>Visita el proyecto en la dirección <a href="https://github.com/pituluk/Digital">GitHub</a>.
+      También disponible en GitHub <a href="https://github.com/pituluk/Digital/releases/latest">descarga</a>
       la última versión.</p>
       <p>Allí también puedes aportar un <a
-      href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">problema</a>
+      href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">problema</a>
       o sugerencia
-      o <a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">mejoras</a>.</p>
+      o <a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">mejoras</a>.</p>
       <p>Traducido al castellano por Ángel Millán León</p>]]></string>
   <string name="msg_N_nodes">{0} nodos</string>
   <string name="msg_analyseErr">Error al analizar el circuito</string>
@@ -1565,9 +1565,9 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_newRelease_N">&lt;html&gt;
     &lt;h1&gt;Nueva versión {0} disponible&lt;/h1&gt;
     &lt;p&gt;Hay una nueva versión del simulador disponible.&lt;/p&gt;
-    &lt;p&gt;En la ruta &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;, notas de la versión&lt;/a&gt;
+    &lt;p&gt;En la ruta &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;, notas de la versión&lt;/a&gt;
     puede econtrar los cambios y mejoras..&lt;/p&gt;
-    &lt;p&gt;Aquí puede &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;descargar&lt;/a&gt; la
+    &lt;p&gt;Aquí puede &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;descargar&lt;/a&gt; la
     nueva versión.&lt;/p&gt;
     &lt;/html&gt;
   </string>

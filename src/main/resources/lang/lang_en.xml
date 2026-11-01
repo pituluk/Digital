@@ -2046,12 +2046,12 @@
         <p>A simple simulator for digital circuits.</p>
         <p>Written by H. Neemann in 2016-2023.</p>
         <p>The icons are taken from the <a href="http://tango.freedesktop.org">Tango Desktop Project</a>.</p>
-        <p>Visit the project at <a href="https://github.com/hneemann/[[name]]">GitHub</a>.
-        At GitHub you can also <a href="https://github.com/hneemann/[[name]]/releases/latest">download</a>
+        <p>Visit the project at <a href="https://github.com/pituluk/Digital">GitHub</a>.
+        At GitHub you can also <a href="https://github.com/pituluk/Digital/releases/latest">download</a>
         the latest release.</p>
-        <p>There you also can file an <a href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">issue</a>
+        <p>There you also can file an <a href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">issue</a>
         or suggest
-        an <a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">enhancement</a>.</p>]]>
+        an <a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">enhancement</a>.</p>]]>
     </string>
     <string name="msg_N_nodes">{0} nodes</string>
     <string name="msg_analyseErr">Error analysing the circuit</string>
@@ -2253,9 +2253,9 @@
         <html>
         <h1>New Version {0} Available</h1>
         <p>There is a new release of the simulator available.</p>
-        <p>In the <a href="https://github.com/hneemann/[[name]]/releases/latest">release notes</a>
+        <p>In the <a href="https://github.com/pituluk/Digital/releases/latest">release notes</a>
         you can find the changes and improvements.</p>
-        <p>Here you can <a href="https://github.com/hneemann/[[name]]/releases/latest">download</a> the new release.</p>
+        <p>Here you can <a href="https://github.com/pituluk/Digital/releases/latest">download</a> the new release.</p>
         </html>
     ]]></string>
 

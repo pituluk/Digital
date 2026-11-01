@@ -1472,12 +1472,12 @@ In the file howTo.md you can find more details about translations.
       <p>Um simulator simples para circuitos digitais.</p>
       <p>Elaborado por H. Neemann em 2016-2023.</p>
       <p>Os ícones foram tomados de <a href="http://tango.freedesktop.org">Tango Desktop Project</a>.</p>
-      <p>Para conhecer melhor o projeto, visitar <a href="https://github.com/hneemann/[[name]]">GitHub</a>.
-      Última versão disponível em <a href="https://github.com/hneemann/[[name]]/releases/latest">download</a>.</p>
+      <p>Para conhecer melhor o projeto, visitar <a href="https://github.com/pituluk/Digital">GitHub</a>.
+      Última versão disponível em <a href="https://github.com/pituluk/Digital/releases/latest">download</a>.</p>
       <p>Questões poderão ser endereçadas para <a
-      href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">issue</a>
+      href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">issue</a>
       ou sugestões
-      para <a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">enhancement</a>.</p>]]></string>
+      para <a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">enhancement</a>.</p>]]></string>
     <string name="msg_N_nodes">{0} nodos</string>
     <string name="msg_analyseErr">Erro ao analisar o circuito</string>
     <string name="msg_color">Cor</string>
@@ -1625,9 +1625,9 @@ In the file howTo.md you can find more details about translations.
     <string name="msg_newRelease_N"><![CDATA[<html>
         <h1>Nova versão {0} disponível</h1>
         <p>Há uma nova versão do simulador disponível.</p>
-        <p>Em <a href="https://github.com/hneemann/[[name]]/releases/latest">Release Notes</a>
+        <p>Em <a href="https://github.com/pituluk/Digital/releases/latest">Release Notes</a>
         poderão ser encontradas as alterações e melhorias.</p>
-        <p>Em <a href="https://github.com/hneemann/[[name]]/releases/latest">download</a> se poderá encontrar a nova versão.</p>
+        <p>Em <a href="https://github.com/pituluk/Digital/releases/latest">download</a> se poderá encontrar a nova versão.</p>
         </html>]]></string>
     <string name="msg_expressionHelpTitle">Expressões</string>
     <string name="msg_expressionHelp"><![CDATA[

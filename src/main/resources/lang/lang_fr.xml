@@ -2021,13 +2021,13 @@ In the file howTo.md you can find more details about translations.
         <p>Un simulateur simple pour les circuits numériques.</p>
         <p>Écrit par H. Neemann de 2016-2023.</p>
         <p>Les icônes ont été prises du <a href="http://tango.freedesktop.org">projet Tango Desktop</a>.</p>
-        <p>Visiter le projet sur <a href="https://github.com/hneemann/[[name]]">GitHub</a>.
-        Sur GitHub vous pouvez aussi <a href="https://github.com/hneemann/[[name]]/releases/latest">télécharger</a>
+        <p>Visiter le projet sur <a href="https://github.com/pituluk/Digital">GitHub</a>.
+        Sur GitHub vous pouvez aussi <a href="https://github.com/pituluk/Digital/releases/latest">télécharger</a>
         la dernière version.</p>
         <p>Vous pouvez aussi y poser <a
-        href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&labels=bug">une
+        href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&labels=bug">une
         question au sujet d'un problème</a>
-        ou suggérer une <a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement">amélioration</a>.</p>]]>
+        ou suggérer une <a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement">amélioration</a>.</p>]]>
     </string>
     <string name="msg_N_nodes">{0} noeuds</string>
     <string name="msg_analyseErr">Erreur lors de l'analyse du circuit</string>
@@ -2214,8 +2214,8 @@ In the file howTo.md you can find more details about translations.
         &lt;h1&gt;Nouvelle version {0} disponible&lt;/h1&gt;
         &lt;p&gt;Une nouvelle version du simulateur est disponible.&lt;/p&gt;
         &lt;p&gt;Vous pouvez voir les changements et les améliorations dans les
-        &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;notes de mise à jour&lt;/a&gt;&lt;/p&gt;.
-        &lt;p&gt;Vous pouvez aussi &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;télécharger&lt;/a&gt;
+        &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;notes de mise à jour&lt;/a&gt;&lt;/p&gt;.
+        &lt;p&gt;Vous pouvez aussi &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;télécharger&lt;/a&gt;
         la nouvelle version.&lt;/p&gt;
         &lt;/html&gt;
     </string>

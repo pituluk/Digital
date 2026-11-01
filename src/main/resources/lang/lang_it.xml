@@ -1589,12 +1589,12 @@ In the file howTo.md you can find more details about translations.
         &lt;p&gt;Un semplice simulatore per circuiti digitali.&lt;/p&gt;
         &lt;p&gt;Scritto da H. Neemann nel 2016-2023.&lt;/p&gt;
         &lt;p&gt;Le icone sono prese dal &lt;a href="http://tango.freedesktop.org"&gt;Tango Desktop Project&lt;/a&gt;.&lt;/p&gt;
-        &lt;p&gt;Visita il progetto su &lt;a href="https://github.com/hneemann/[[name]]"&gt;GitHub&lt;/a&gt;.
-        Su GitHub puoi anche &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;scaricare&lt;/a&gt;
+        &lt;p&gt;Visita il progetto su &lt;a href="https://github.com/pituluk/Digital"&gt;GitHub&lt;/a&gt;.
+        Su GitHub puoi anche &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;scaricare&lt;/a&gt;
         l'ultima versione.&lt;/p&gt;
-        &lt;p&gt;Puoi anche inviare un &lt;a href="https://github.com/hneemann/[[name]]/issues/new?body=version:%20[[version]]&amp;labels=bug"&gt;problema&lt;/a&gt;
+        &lt;p&gt;Puoi anche inviare un &lt;a href="https://github.com/pituluk/Digital/issues/new?body=version:%20[[version]]&amp;labels=bug"&gt;problema&lt;/a&gt;
         o suggerire
-        un &lt;a href="https://github.com/hneemann/[[name]]/issues/new?labels=enhancement"&gt;miglioramento&lt;/a&gt;.&lt;/p&gt;</string>
+        un &lt;a href="https://github.com/pituluk/Digital/issues/new?labels=enhancement"&gt;miglioramento&lt;/a&gt;.&lt;/p&gt;</string>
     <string name="msg_N_nodes">{0} nodi</string>
     <string name="msg_analyseErr">Errore durante l'analisi del circuito</string>
     <string name="msg_color">Colore</string>
@@ -1760,9 +1760,9 @@ In the file howTo.md you can find more details about translations.
     <string name="msg_newRelease_N">&lt;html&gt;
         &lt;h1&gt;Nuova versione {0} disponibile&lt;/h1&gt;
         &lt;p&gt;C''è una nuova versione del simulatore disponibile.&lt;/p&gt;
-        &lt;p&gt;Nelle &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;note di rilascio&lt;/a&gt;
+        &lt;p&gt;Nelle &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;note di rilascio&lt;/a&gt;
         puoi trovare i cambiamenti ed i miglioramenti.&lt;/p&gt;
-        &lt;p&gt;Qui puoi &lt;a href="https://github.com/hneemann/[[name]]/releases/latest"&gt;scaricare&lt;/a&gt; la nuova versione.&lt;/p&gt;
+        &lt;p&gt;Qui puoi &lt;a href="https://github.com/pituluk/Digital/releases/latest"&gt;scaricare&lt;/a&gt; la nuova versione.&lt;/p&gt;
         &lt;/html&gt;</string>
     <string name="msg_expressionHelpTitle">Espressioni</string>
     <string name="msg_expressionHelp">&lt;p&gt;Per definire un'espressione puoi utilizzare tutte le notazioni più comuni:&lt;/p&gt;

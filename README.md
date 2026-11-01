@@ -24,6 +24,21 @@ If there are any problems starting Digital on your system, please try to run Dig
 java -jar Digital.jar
 ```
 
+## Version checks and releases ##
+
+The version check compares the JAR's embedded Git revision with the latest published release in this repository.
+The embedded revision is generated from the nearest Git tag (`git describe`); the Maven version `1.0-SNAPSHOT` is
+separate and does not control the release dialog. Push a version tag such as `v1.2.0` to build and publish a
+versioned GitHub release automatically:
+
+```
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+Use a new tag for each release; do not move or reuse a published version tag. Pushes to `master` continue updating the
+stable `Digital.zip` download, while the dialog checks the latest published versioned release.
+
 ## Features ##
 
 These are the main features of Digital:
