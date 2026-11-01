@@ -1,5 +1,6 @@
 [![Download](distribution/Download.svg)](https://github.com/pituluk/Digital/releases/download/release/Digital.zip)
 
+## [Try it in browser!](https://pitu.me/digital/)
 # Digital #
 
 Digital is an easy-to-use digital logic designer and circuit simulator designed for educational purposes.
