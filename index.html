@@ -91,6 +91,7 @@
       const statusText = document.getElementById("status-text");
       const loadingScreen = document.getElementById("loading-screen");
       const siteBase = new URL(".", document.baseURI);
+      const cheerpjAppBase = `/app${siteBase.pathname}`;
 
       async function prepareAndRunApp() {
         statusText.innerText = "Loading Java Virtual Filesystem...";
@@ -99,7 +100,7 @@
         const Paths = await lib.java.nio.file.Paths;
 
         statusText.innerText = "Checking application core...";
-        const jarSource = await Paths.get("/app/Digital.jar");
+        const jarSource = await Paths.get(`${cheerpjAppBase}Digital.jar`);
         const jarTarget = await Paths.get("/files/digital/Digital.jar");
 
         if (!(await Files.exists(jarTarget))) {
@@ -126,7 +127,7 @@
 
         let copiedCount = 0;
         for (const relativePath of manifest.files) {
-          const source = await Paths.get(`/app/lib/${relativePath}`);
+          const source = await Paths.get(`${cheerpjAppBase}lib/${relativePath}`);
           const target = await Paths.get(`/files/digital/lib/${relativePath}`);
 
           if (!(await Files.exists(target))) {
