@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Digital Logic Simulator</title>
+    <script src="https://cjrtnc.leaningtech.com/20261028_3750/loader.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background-color: #1a1a1a;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #cheerpj-container {
+        flex: 1;
+        width: 100%;
+        position: relative;
+      }
+
+      #footer {
+        height: 24px;
+        background-color: #0d0d0d;
+        color: #777;
+        font-family: sans-serif;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 15px;
+        border-top: 1px solid #333;
+      }
+
+      #footer a {
+        color: #aaa;
+        text-decoration: none;
+      }
+
+      #footer a:hover {
+        color: #fff;
+      }
+
+      #loading-screen {
+        position: absolute;
+        inset: 0;
+        background-color: #1a1a1a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #eee;
+        font-family: sans-serif;
+        z-index: 1000;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-left-color: #fff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 15px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cheerpj-container">
+      <div id="loading-screen">
+        <div class="spinner"></div>
+        <div id="status-text">Initializing CheerpJ...</div>
+      </div>
+    </div>
+
+    <div id="footer">
+      <span><a href="https://github.com/pituluk/Digital" target="_blank" rel="noopener noreferrer"><strong>Digital</strong></a> - A digital logic designer and circuit simulator</span>
+      <span>Powered by <a href="https://labs.leaningtech.com/cheerpj3" target="_blank" rel="noopener noreferrer">CheerpJ</a></span>
+    </div>
+
+    <script>
+      const statusText = document.getElementById("status-text");
+      const loadingScreen = document.getElementById("loading-screen");
+      const siteBase = new URL(".", document.baseURI);
+
+      async function prepareAndRunApp() {
+        statusText.innerText = "Loading Java Virtual Filesystem...";
+        const lib = await cheerpjRunLibrary("");
+        const Files = await lib.java.nio.file.Files;
+        const Paths = await lib.java.nio.file.Paths;
+
+        statusText.innerText = "Checking application core...";
+        const jarSource = await Paths.get("/app/Digital.jar");
+        const jarTarget = await Paths.get("/files/digital/Digital.jar");
+
+        if (!(await Files.exists(jarTarget))) {
+          statusText.innerText = "Downloading application (first run takes longer)...";
+          await Files.createDirectories(await jarTarget.getParent());
+          await Files.copy(jarSource, jarTarget);
+        }
+
+        statusText.innerText = "Fetching component list...";
+        const response = await fetch(new URL("manifest.json", siteBase));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch library manifest (${response.status})`);
+        }
+
+        const manifest = await response.json();
+        if (!manifest || !Array.isArray(manifest.files) || !Array.isArray(manifest.directories)) {
+          throw new Error("Library manifest must contain files and directories arrays");
+        }
+
+        for (const relativePath of manifest.directories) {
+          const target = await Paths.get(`/files/digital/lib/${relativePath}`);
+          await Files.createDirectories(target);
+        }
+
+        let copiedCount = 0;
+        for (const relativePath of manifest.files) {
+          const source = await Paths.get(`/app/lib/${relativePath}`);
+          const target = await Paths.get(`/files/digital/lib/${relativePath}`);
+
+          if (!(await Files.exists(target))) {
+            statusText.innerText = `Downloading library components (${++copiedCount}/${manifest.files.length})...`;
+            await Files.createDirectories(await target.getParent());
+            await Files.copy(source, target);
+          }
+        }
+      }
+
+      (async function () {
+        try {
+          await cheerpjInit();
+          await prepareAndRunApp();
+
+          statusText.innerText = "Starting Digital...";
+          loadingScreen.style.display = "none";
+          cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj-container"));
+          await cheerpjRunJar("/files/digital/Digital.jar");
+        } catch (error) {
+          statusText.innerText = "Digital could not be started. See the browser console for details.";
+          console.error("Digital initialization error:", error);
+        }
+      })();
+    </script>
+  </body>
+</html>
