@@ -426,6 +426,10 @@ public class VisualElement implements Drawable, Movable, AttributeListener {
         return this;
     }
 
+    boolean hasShapeFactory() {
+        return shape != null || shapeFactory != null;
+    }
+
     /**
      * Returns true if this element is from the given type
      *

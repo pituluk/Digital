@@ -8,6 +8,7 @@ package de.neemann.digital.draw.elements;
 import de.neemann.digital.draw.graphics.Vector;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Objects;
 
@@ -33,11 +34,22 @@ public class WireConsistencyChecker {
      * @return the simplified wires
      */
     public ArrayList<Wire> check() {
-        wires = merge(wires);
+        wires = merge(wires, new ArrayList<Vector>());
         return wires;
     }
 
-    private ArrayList<Wire> merge(ArrayList<Wire> wires) {
+    /**
+     * Performs the check while keeping the given coordinates as wire endpoints.
+     *
+     * @param protectedPoints coordinates that must remain wire endpoints
+     * @return the simplified wires
+     */
+    public ArrayList<Wire> check(Collection<Vector> protectedPoints) {
+        wires = merge(wires, protectedPoints);
+        return wires;
+    }
+
+    private ArrayList<Wire> merge(ArrayList<Wire> wires, Collection<Vector> protectedPoints) {
 
         HashSet<Vector> horiPoints = new HashSet<>();
         HashSet<Vector> vertPoints = new HashSet<>();
@@ -73,6 +85,8 @@ public class WireConsistencyChecker {
         hori.protectPoints(vertPoints);
         vert.protectPoints(diagPoints);
         vert.protectPoints(horiPoints);
+        hori.protectEndpoints(protectedPoints);
+        vert.protectEndpoints(protectedPoints);
 
         hori.addTo(newWires);
         vert.addTo(newWires);

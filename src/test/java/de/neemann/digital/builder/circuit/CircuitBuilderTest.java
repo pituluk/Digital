@@ -25,6 +25,7 @@ import de.neemann.digital.draw.elements.Circuit;
 import de.neemann.digital.draw.elements.PinException;
 import de.neemann.digital.draw.elements.Tunnel;
 import de.neemann.digital.draw.elements.VisualElement;
+import de.neemann.digital.draw.elements.Wire;
 import de.neemann.digital.draw.library.ElementLibrary;
 import de.neemann.digital.draw.library.ElementNotFoundException;
 import de.neemann.digital.draw.model.ModelCreator;
@@ -43,6 +44,7 @@ import static de.neemann.digital.analyse.expression.Not.not;
 import static de.neemann.digital.analyse.expression.Operation.and;
 import static de.neemann.digital.analyse.expression.Operation.or;
 import static de.neemann.digital.analyse.expression.Operation.xor;
+import static de.neemann.digital.draw.shapes.GenericShape.SIZE;
 
 /**
  *
@@ -63,7 +65,6 @@ public class CircuitBuilderTest extends TestCase {
                 .createCircuit();
 
         ModelCreator m = new ModelCreator(circuit, library);
-
         TestExecuter te = new TestExecuter(m.createModel(false)).setUp(m);
         te.check(0, 0, 0);
         te.check(0, 1, 1);
@@ -392,6 +393,27 @@ public class CircuitBuilderTest extends TestCase {
         te.check(1, 0, 1, 1, 1);
     }
 
+    public void testBuilder74xxInputFanoutOnSameChip() throws Exception {
+        Variable a = new Variable("a");
+        Variable b = new Variable("b");
+        Variable c = new Variable("c");
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addCombinatorial("y1", or(a, b))
+                .addCombinatorial("y2", or(b, c))
+                .addCombinatorial("y", or(a, b, c))
+                .createCircuit();
+
+        ModelCreator model = new ModelCreator(circuit, library);
+        TestExecuter testExecuter = new TestExecuter(model.createModel(false)).setUp(model);
+        testExecuter.check(0, 0, 0, 0, 0, 0);
+        testExecuter.check(0, 1, 0, 1, 1, 1);
+        testExecuter.check(1, 0, 0, 1, 0, 1);
+        testExecuter.check(0, 0, 1, 0, 1, 1);
+    }
+
     public void testBuilder74xxPacking() throws Exception {
         Variable a = new Variable("a");
         Variable b = new Variable("b");
@@ -449,4 +471,27 @@ public class CircuitBuilderTest extends TestCase {
         // a=1, b=1 => nand=0, nor=0, xor=0, xnor=1
         te.check(1, 1, 0, 0, 0, 1);
     }
+
+    public void testBuilder74xxRoutesUseGridAlignedOrthogonalSegments() throws Exception {
+        Variable a = new Variable("a");
+        Variable b = new Variable("b");
+        Variable c = new Variable("c");
+        Expression y = or(and(a, b), and(b, c), and(a, c));
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addCombinatorial("y", y)
+                .createCircuit();
+
+        assertFalse(circuit.getWires().isEmpty());
+        for (Wire wire : circuit.getWires()) {
+            assertTrue(wire.p1.x == wire.p2.x || wire.p1.y == wire.p2.y);
+            assertEquals(0, wire.p1.x % SIZE);
+            assertEquals(0, wire.p1.y % SIZE);
+            assertEquals(0, wire.p2.x % SIZE);
+            assertEquals(0, wire.p2.y % SIZE);
+        }
+    }
+
 }

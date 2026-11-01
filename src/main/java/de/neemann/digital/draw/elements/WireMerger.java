@@ -11,6 +11,7 @@ import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Objects;
 
 /**
@@ -89,6 +90,21 @@ public class WireMerger {
             if (containers != null) {    // is possible because diagonals are not included
                 for (WireContainer wc : containers)
                     wc.protect(handler.getS(v));
+            }
+        }
+    }
+
+    /**
+     * Protects points that are endpoints of wires in the same container.
+     *
+     * @param points the points to protect
+     */
+    public void protectEndpoints(Collection<Vector> points) {
+        for (Vector v : points) {
+            ArrayList<WireContainer> containers = wireContainers.get(handler.getWireClass(v));
+            if (containers != null) {
+                for (WireContainer wc : containers)
+                    wc.protectEndpoint(handler.getS(v));
             }
         }
     }
@@ -181,15 +197,19 @@ public class WireMerger {
         private int wireClass;
         private Color color;
         private ArrayList<SimpleWire> wires;
+        private HashSet<Integer> endpoints;
 
         WireContainer(int wireClass, Color color) {
             this.wireClass = wireClass;
             this.color = color;
             wires = new ArrayList<>();
+            endpoints = new HashSet<>();
         }
 
         public void add(SimpleWire newSimpleWire) {
             wires.add(newSimpleWire);
+            endpoints.add(newSimpleWire.s1);
+            endpoints.add(newSimpleWire.s2);
             simplify(newSimpleWire);
         }
 
@@ -220,6 +240,11 @@ public class WireMerger {
                     wires.add(new SimpleWire(wireClass, s, s2));
                 }
             }
+        }
+
+        public void protectEndpoint(int s) {
+            if (endpoints.contains(s))
+                protect(s);
         }
     }
 }

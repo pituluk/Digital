@@ -358,8 +358,7 @@ public class Circuit implements Copyable<Circuit> {
         if (newWire.p1.equals(newWire.p2))
             return null;
         wires.add(newWire);
-        WireConsistencyChecker checker = new WireConsistencyChecker(wires);
-        wires = checker.check();
+        checkWireConsistency();
 
         dotsPresent = false;
         return this;
@@ -373,8 +372,7 @@ public class Circuit implements Copyable<Circuit> {
      */
     public Circuit add(ArrayList<Wire> newWires) {
         wires.addAll(newWires);
-        WireConsistencyChecker checker = new WireConsistencyChecker(wires);
-        wires = checker.check();
+        checkWireConsistency();
 
         dotsPresent = false;
         return this;
@@ -384,10 +382,21 @@ public class Circuit implements Copyable<Circuit> {
      * Called if elements are moved
      */
     public void elementsMoved() {
-        WireConsistencyChecker checker = new WireConsistencyChecker(wires);
-        wires = checker.check();
+        checkWireConsistency();
 
         dotsPresent = false;
+    }
+
+    private void checkWireConsistency() {
+        Set<Vector> pinPositions = new HashSet<>();
+        for (VisualElement element : visualElements) {
+            if (element.hasShapeFactory()) {
+                for (Pin pin : element.getPins()) {
+                    pinPositions.add(pin.getPos());
+                }
+            }
+        }
+        wires = new WireConsistencyChecker(wires).check(pinPositions);
     }
 
     /**
@@ -629,8 +638,7 @@ public class Circuit implements Copyable<Circuit> {
         }
 
         if (wireDeleted) {
-            WireConsistencyChecker checker = new WireConsistencyChecker(wires);
-            wires = checker.check();
+            checkWireConsistency();
         }
 
         dotsPresent = false;
@@ -652,8 +660,7 @@ public class Circuit implements Copyable<Circuit> {
      */
     public void delete(Wire wireToDelete) {
         if (wires.remove(wireToDelete)) {
-            WireConsistencyChecker checker = new WireConsistencyChecker(wires);
-            wires = checker.check();
+            checkWireConsistency();
             dotsPresent = false;
         }
     }

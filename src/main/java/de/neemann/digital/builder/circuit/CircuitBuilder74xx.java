@@ -30,28 +30,35 @@ import de.neemann.digital.draw.elements.VisualElement;
 import de.neemann.digital.draw.elements.Wire;
 import de.neemann.digital.draw.graphics.Vector;
 import de.neemann.digital.draw.shapes.ShapeFactory;
+import de.neemann.digital.draw.graphics.GraphicMinMax;
 
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 import static de.neemann.digital.draw.shapes.GenericShape.SIZE;
 
 /**
  * Circuit builder that maps generated expressions onto 74xx DIL chips.
- * Connections between inputs, chips, and outputs are routed using distinctly colored wires,
- * bridges cross cleanly in inter-chip gaps, and unused gate inputs are tied to Ground using tunnels.
+ * Gate pins are allocated to reduce estimated net length, then orthogonal fixed-spacing side channels
+ * route distinctly colored wires. Bridges cross in inter-chip gaps, and unused inputs are tied to Ground.
  */
 public class CircuitBuilder74xx {
+
+    private static final int BASE_CHIP_PITCH_Y = 17 * SIZE;
+    private static final int ROUTE_MARGIN = 24 * SIZE;
+    private static final int ROUTE_BEND_COST = 4;
 
     private static final Color[] NET_COLORS = new Color[]{
             new Color(30, 144, 255),  // Dodger Blue
@@ -80,22 +87,118 @@ public class CircuitBuilder74xx {
     private final ModelAnalyserInfo mai;
 
     private final List<ChipInstance> chipInstances = new ArrayList<>();
+    private final Map<ChipInstance, ChipGeometry> chipGeometry = new LinkedHashMap<>();
+    private final Map<String, Vector> inputPositions = new LinkedHashMap<>();
+    private final Set<RoutePoint> fixedRoutePoints = new HashSet<>();
+    private final Map<RoutePoint, Map<String, Integer>> occupiedTrackDirections = new HashMap<>();
+    private String currentRouteNet;
     private int chipCounter = 0;
     private int netCounter = 0;
     private boolean const1Used = false;
     private boolean const0Used = false;
 
     private enum PinSide {
-        INPUT, CHIP_LEFT, CHIP_RIGHT, OUTPUT
+        INPUT, CHIP_LEFT, CHIP_RIGHT, CHIP_TOP, CHIP_BOTTOM, OUTPUT
     }
 
     private static class Endpoint {
         private final PinSide side;
+        private final Vector position;
+        private final Vector normal;
+        private final int y;
+        private final ChipInstance chip;
+        private final boolean output;
+
+        Endpoint(PinSide side, Vector position, Vector normal) {
+            this(side, position, normal, null, false);
+        }
+
+        Endpoint(PinSide side, Vector position, Vector normal, ChipInstance chip, boolean output) {
+            this.side = side;
+            this.position = position;
+            this.normal = normal;
+            this.y = position.y;
+            this.chip = chip;
+            this.output = output;
+        }
+    }
+
+    private static class ChipGeometry {
+        private final Vector min;
+        private final Vector max;
+        private final List<Vector> pinPositions;
+
+        ChipGeometry(Vector min, Vector max, List<Vector> pinPositions) {
+            this.min = min;
+            this.max = max;
+            this.pinPositions = pinPositions;
+        }
+    }
+
+    private static class RoutePoint {
+        private final int x;
         private final int y;
 
-        Endpoint(PinSide side, int y) {
-            this.side = side;
+        RoutePoint(int x, int y) {
+            this.x = x;
             this.y = y;
+        }
+
+        RoutePoint add(int dx, int dy) {
+            return new RoutePoint(x + dx, y + dy);
+        }
+
+        Vector toVector() {
+            return new Vector(x, y);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof RoutePoint)) {
+                return false;
+            }
+            RoutePoint point = (RoutePoint) other;
+            return x == point.x && y == point.y;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * x + y;
+        }
+    }
+
+    private static class RouteSearchNode implements Comparable<RouteSearchNode> {
+        private final RoutePoint point;
+        private final int direction;
+        private final int cost;
+        private final int estimate;
+        private final RouteSearchNode previous;
+
+        RouteSearchNode(RoutePoint point, int direction, int cost, int estimate,
+                        RouteSearchNode previous) {
+            this.point = point;
+            this.direction = direction;
+            this.cost = cost;
+            this.estimate = estimate;
+            this.previous = previous;
+        }
+
+        @Override
+        public int compareTo(RouteSearchNode other) {
+            return Integer.compare(cost + estimate, other.cost + other.estimate);
+        }
+    }
+
+    private static class LocalConnection {
+        private final String netName;
+        private final Endpoint source;
+        private final Endpoint target;
+        private int track;
+
+        LocalConnection(String netName, Endpoint source, Endpoint target) {
+            this.netName = netName;
+            this.source = source;
+            this.target = target;
         }
     }
 
@@ -114,6 +217,8 @@ public class CircuitBuilder74xx {
         private int trackPitch = 2 * SIZE;
         private int chipPitchY = 24 * SIZE;
         private int numChips;
+        private Map<String, Integer> directLeftOutputTracks;
+        private Set<String> directChipNets;
 
         RoutingLayout(int xInput, int xChip, int xChipRight, int xOutput,
                       int xLeftTrackStart, int xRightTrackStart) {
@@ -131,6 +236,26 @@ public class CircuitBuilder74xx {
             this.numChips = numChips;
             return this;
         }
+
+        RoutingLayout setDirectLeftOutputTracks(Map<String, Integer> directLeftOutputTracks) {
+            this.directLeftOutputTracks = directLeftOutputTracks;
+            return this;
+        }
+
+        RoutingLayout setDirectChipNets(Set<String> directChipNets) {
+            this.directChipNets = directChipNets;
+            return this;
+        }
+    }
+
+    private List<Endpoint> getExternallyRoutedEndpoints(List<Endpoint> endpoints, Set<Endpoint> localEndpoints) {
+        List<Endpoint> external = new ArrayList<>();
+        for (Endpoint endpoint : endpoints) {
+            if (!localEndpoints.contains(endpoint)) {
+                external.add(endpoint);
+            }
+        }
+        return external;
     }
 
     /**
@@ -176,48 +301,267 @@ public class CircuitBuilder74xx {
             seqResultNets.put(entry.getKey(), processExpression(entry.getValue()));
         }
 
-        padUnusedGateInputs();
-
         LinkedHashSet<String> inputs = findInputVariables();
-        Map<String, NetRoute> netRoutes = new LinkedHashMap<>();
+        orderChipsByConnectivity(inputs);
+        padUnusedGateInputs();
+        optimizePinAllocation(inputs);
+
+        Map<String, NetRoute> inputRoutes = new LinkedHashMap<>();
+        inputPositions.clear();
+        chipGeometry.clear();
+        fixedRoutePoints.clear();
+        occupiedTrackDirections.clear();
 
         int xInput = 0;
-        int yInput = placeInputs(circuit, inputs, netRoutes, xInput);
-
-        int chipPitchY = 24 * SIZE;
-        List<Integer> chipYPositions = new ArrayList<>();
-        List<VisualElement> chipVisualElements = prepareChips(netRoutes, chipYPositions, chipPitchY);
-
+        int yInput = placeInputs(circuit, inputs, inputRoutes, xInput);
+        Map<String, NetRoute> netRoutes = copyRoutes(inputRoutes);
+        List<VisualElement> chipVisualElements = prepareChips(netRoutes);
         Map<String, Integer> outputYMap = calculateOutputPositions(combResultNets, netRoutes);
-        registerOutputEndpoints(combResultNets, netRoutes, outputYMap);
+        int xOutput = alignToGrid(getChipLayoutMaxX() + 12 * SIZE);
+        registerOutputEndpoints(combResultNets, netRoutes, outputYMap, xOutput);
 
-        List<String> leftNets = new ArrayList<>();
-        List<String> rightNets = new ArrayList<>();
-        Set<String> bridgedNets = new HashSet<>();
-        classifyNets(netRoutes, leftNets, rightNets, bridgedNets);
-
-        int trackPitch = 2 * SIZE;
-        int xLeftTrackStart = xInput + 6 * SIZE;
-        int xChip = xLeftTrackStart + (leftNets.size() + 2) * trackPitch + 2 * SIZE;
-        int xChipRight = xChip + 6 * SIZE;
-        int xRightTrackStart = xChipRight + 6 * SIZE;
-        int xOutput = xRightTrackStart + (rightNets.size() + 2) * trackPitch + 2 * SIZE;
-
-        placeChipsInCircuit(circuit, chipVisualElements, chipYPositions, xChip);
+        placeChipsInCircuit(circuit, chipVisualElements);
         int yOutput = placeOutputsInCircuit(circuit, combResultNets, outputYMap, xOutput);
 
-        RoutingLayout layout = new RoutingLayout(xInput, xChip, xChipRight, xOutput,
-                xLeftTrackStart, xRightTrackStart).setGeometry(trackPitch, chipPitchY, chipInstances.size());
-
-        routeNets(circuit, netRoutes, leftNets, rightNets, new ArrayList<>(bridgedNets), layout);
-
         placeConstants(circuit, xInput, yInput);
+        routeGridNets(circuit, netRoutes, xOutput);
 
         if (!seqResultNets.isEmpty()) {
             placeSequential(circuit, seqResultNets, xOutput, yOutput);
         }
 
         return circuit;
+    }
+
+    private Map<String, NetRoute> copyRoutes(Map<String, NetRoute> routes) {
+        Map<String, NetRoute> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, NetRoute> entry : routes.entrySet()) {
+            NetRoute routeCopy = new NetRoute();
+            routeCopy.leftEndpoints.addAll(entry.getValue().leftEndpoints);
+            routeCopy.rightEndpoints.addAll(entry.getValue().rightEndpoints);
+            copy.put(entry.getKey(), routeCopy);
+        }
+        return copy;
+    }
+
+    private int calculateRequiredChipPitch(Set<String> bridgedNets, Map<String, NetRoute> netRoutes,
+                                           int chipPitchY) {
+        Map<Integer, Integer> gapUsage = new HashMap<>();
+        int maxPerGap = 0;
+        for (String netName : bridgedNets) {
+            int gapIdx = findBestGap(computeAverageY(netRoutes.get(netName)),
+                    chipInstances.size(), chipPitchY);
+            int count = gapUsage.getOrDefault(gapIdx, 0) + 1;
+            gapUsage.put(gapIdx, count);
+            maxPerGap = Math.max(maxPerGap, count);
+        }
+        return BASE_CHIP_PITCH_Y + Math.max(0, maxPerGap - 1) * 2 * SIZE;
+    }
+
+    private void orderChipsByConnectivity(LinkedHashSet<String> inputs) {
+        if (chipInstances.size() < 2) {
+            return;
+        }
+
+        boolean improved;
+        do {
+            improved = false;
+            long bestCost = calculateChipPlacementCost(inputs);
+            int bestFirst = -1;
+            int bestSecond = -1;
+            for (int first = 0; first < chipInstances.size(); first++) {
+                for (int second = first + 1; second < chipInstances.size(); second++) {
+                    Collections.swap(chipInstances, first, second);
+                    long cost = calculateChipPlacementCost(inputs);
+                    Collections.swap(chipInstances, first, second);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        bestFirst = first;
+                        bestSecond = second;
+                    }
+                }
+            }
+            if (bestFirst >= 0) {
+                Collections.swap(chipInstances, bestFirst, bestSecond);
+                improved = true;
+            }
+        } while (improved);
+    }
+
+    private long calculateChipPlacementCost(LinkedHashSet<String> inputs) {
+        Map<String, Vector> inputPositions = new HashMap<>();
+        int nextInputY = SIZE;
+        for (String input : inputs) {
+            inputPositions.put(input, new Vector(0, nextInputY));
+            nextInputY += 4 * SIZE;
+        }
+
+        Map<ChipInstance, Map<Integer, GatePinPositions>> pinPositions = createEstimatedPinPositions();
+        Map<String, Vector> sourcePositions = new HashMap<>(inputPositions);
+        for (ChipInstance chip : chipInstances) {
+            for (Gate gate : chip.allocatedGates) {
+                if (gate.outputNet != null) {
+                    sourcePositions.put(gate.outputNet, pinPositions.get(chip).get(gate.slot).output);
+                }
+            }
+        }
+
+        long cost = 0;
+        for (ChipInstance chip : chipInstances) {
+            Map<Integer, GatePinPositions> chipPins = pinPositions.get(chip);
+            for (Gate gate : chip.allocatedGates) {
+                GatePinPositions pins = chipPins.get(gate.slot);
+                for (int pin = 0; pin < gate.inputNets.size(); pin++) {
+                    Vector source = sourcePositions.get(gate.inputNets.get(pin));
+                    Vector target = pin == 0 ? pins.inputA : pins.inputB;
+                    if (source != null && target != null) {
+                        cost += manhattanDistance(source, target);
+                    }
+                }
+            }
+        }
+        return cost;
+    }
+
+    private void optimizePinAllocation(LinkedHashSet<String> inputs) {
+        Map<String, Vector> inputPositions = new HashMap<>();
+        int y = SIZE;
+        for (String input : inputs) {
+            inputPositions.put(input, new Vector(0, y));
+            y += 4 * SIZE;
+        }
+
+        Map<ChipInstance, Map<Integer, GatePinPositions>> pinPositions = createEstimatedPinPositions();
+
+        boolean improved;
+        do {
+            improved = false;
+            long currentCost = calculatePinAllocationCost(inputPositions, pinPositions);
+            for (ChipInstance chip : chipInstances) {
+                List<Gate> gates = chip.allocatedGates;
+                for (int i = 0; i < gates.size(); i++) {
+                    Gate first = gates.get(i);
+                    if (first.inputNets.size() == 2) {
+                        Collections.swap(first.inputNets, 0, 1);
+                        long swappedCost = calculatePinAllocationCost(inputPositions, pinPositions);
+                        if (swappedCost < currentCost) {
+                            currentCost = swappedCost;
+                            improved = true;
+                        } else {
+                            Collections.swap(first.inputNets, 0, 1);
+                        }
+                    }
+
+                    for (int j = i + 1; j < gates.size(); j++) {
+                        Gate second = gates.get(j);
+                        int slot = first.slot;
+                        first.slot = second.slot;
+                        second.slot = slot;
+
+                        long swappedCost = calculatePinAllocationCost(inputPositions, pinPositions);
+                        if (swappedCost < currentCost) {
+                            currentCost = swappedCost;
+                            improved = true;
+                        } else {
+                            slot = first.slot;
+                            first.slot = second.slot;
+                            second.slot = slot;
+                        }
+                    }
+                }
+            }
+        } while (improved);
+    }
+
+    private long calculatePinAllocationCost(Map<String, Vector> inputPositions,
+                                             Map<ChipInstance, Map<Integer, GatePinPositions>> pinPositions) {
+        Map<String, Vector> sourcePositions = new HashMap<>(inputPositions);
+        for (ChipInstance chip : chipInstances) {
+            Map<Integer, GatePinPositions> chipPins = pinPositions.get(chip);
+            for (Gate gate : chip.allocatedGates) {
+                Vector output = chipPins.get(gate.slot).output;
+                if (gate.outputNet != null && output != null) {
+                    sourcePositions.put(gate.outputNet, output);
+                }
+            }
+        }
+
+        long cost = 0;
+        for (ChipInstance chip : chipInstances) {
+            Map<Integer, GatePinPositions> chipPins = pinPositions.get(chip);
+            for (Gate gate : chip.allocatedGates) {
+                GatePinPositions pins = chipPins.get(gate.slot);
+                for (int i = 0; i < gate.inputNets.size(); i++) {
+                    String net = gate.inputNets.get(i);
+                    Vector source = sourcePositions.get(net);
+                    Vector target = i == 0 ? pins.inputA : pins.inputB;
+                    if (source != null && target != null) {
+                        cost += manhattanDistance(source, target);
+                    }
+                }
+            }
+        }
+        return cost;
+    }
+
+    private Map<ChipInstance, Map<Integer, GatePinPositions>> createEstimatedPinPositions() {
+        int cellWidth = 0;
+        int cellHeight = 0;
+        for (ChipInstance chip : chipInstances) {
+            VisualElement measure = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
+            for (int rotation = 0; rotation < 4; rotation++) {
+                measure.setRotation(rotation).setPos(new Vector(0, 0));
+                GraphicMinMax bounds = measure.getMinMax(false);
+                cellWidth = Math.max(cellWidth, bounds.getMax().x - bounds.getMin().x);
+                cellHeight = Math.max(cellHeight, bounds.getMax().y - bounds.getMin().y);
+            }
+        }
+        cellWidth += 8 * SIZE;
+        cellHeight += 8 * SIZE;
+        int columns = Math.max(1, (int) Math.ceil(Math.sqrt(chipInstances.size())));
+        Map<ChipInstance, Map<Integer, GatePinPositions>> positions = new LinkedHashMap<>();
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance chip = chipInstances.get(i);
+            VisualElement chipVe = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
+            Vector cellOrigin = new Vector(16 * SIZE + (i % columns) * cellWidth,
+                    12 * SIZE + (i / columns) * cellHeight);
+            placeChipInCell(chipVe, cellOrigin, 0);
+            Map<Integer, GatePinPositions> chipPins = new HashMap<>();
+            for (int slot = 1; slot <= chip.maxSlots; slot++) {
+                chipPins.put(slot, new GatePinPositions(getWorldPinPosition(chipVe, slot + "A"),
+                        getWorldPinPosition(chipVe, slot + "B"),
+                        getWorldPinPosition(chipVe, slot + "Y")));
+            }
+            positions.put(chip, chipPins);
+        }
+        return positions;
+    }
+
+    private long manhattanDistance(Vector first, Vector second) {
+        return Math.abs(first.x - second.x) + Math.abs(first.y - second.y);
+    }
+
+    private void sortNetsByEndpointY(List<String> nets, Map<String, NetRoute> netRoutes, final boolean leftSide) {
+        Collections.sort(nets, new Comparator<String>() {
+            @Override
+            public int compare(String first, String second) {
+                int firstY = averageEndpointY(netRoutes.get(first), leftSide);
+                int secondY = averageEndpointY(netRoutes.get(second), leftSide);
+                return Integer.compare(firstY, secondY);
+            }
+        });
+    }
+
+    private int averageEndpointY(NetRoute route, boolean leftSide) {
+        List<Endpoint> endpoints = leftSide ? route.leftEndpoints : route.rightEndpoints;
+        if (endpoints.isEmpty()) {
+            return 0;
+        }
+        int sum = 0;
+        for (Endpoint endpoint : endpoints) {
+            sum += endpoint.y;
+        }
+        return sum / endpoints.size();
     }
 
     private void padUnusedGateInputs() {
@@ -234,7 +578,7 @@ public class CircuitBuilder74xx {
     }
 
     private int placeInputs(Circuit circuit, LinkedHashSet<String> inputs,
-                            Map<String, NetRoute> netRoutes, int xInput) {
+                            Map<String, NetRoute> netRoutes, int xInput) throws BuilderException {
         int yInput = SIZE;
         for (String inName : inputs) {
             VisualElement inVe;
@@ -248,36 +592,152 @@ public class CircuitBuilder74xx {
             inVe.setPos(new Vector(xInput, yInput));
             circuit.add(inVe);
 
-            getRoute(netRoutes, inName).leftEndpoints.add(new Endpoint(PinSide.INPUT, yInput));
+            if (inVe.getPins().size() == 0) {
+                throw new BuilderException("Input element " + inName + " has no output pin");
+            }
+            Vector position = inVe.getPins().get(0).getPos();
+            inputPositions.put(inName, position);
+            fixedRoutePoints.add(toRoutePoint(position));
+            getRoute(netRoutes, inName).leftEndpoints.add(
+                    new Endpoint(PinSide.INPUT, position, new Vector(1, 0)));
             yInput += 4 * SIZE;
         }
         return yInput;
     }
 
-    private List<VisualElement> prepareChips(Map<String, NetRoute> netRoutes,
-                                             List<Integer> chipYPositions, int chipPitchY) {
+    private List<VisualElement> prepareChips(Map<String, NetRoute> netRoutes) {
         List<VisualElement> chipVisualElements = new ArrayList<>();
+        int cellWidth = 0;
+        int cellHeight = 0;
+        for (ChipInstance chip : chipInstances) {
+            VisualElement measure = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
+            for (int rotation = 0; rotation < 4; rotation++) {
+                measure.setRotation(rotation).setPos(new Vector(0, 0));
+                GraphicMinMax bounds = measure.getMinMax(false);
+                cellWidth = Math.max(cellWidth, bounds.getMax().x - bounds.getMin().x);
+                cellHeight = Math.max(cellHeight, bounds.getMax().y - bounds.getMin().y);
+            }
+        }
+        cellWidth += 8 * SIZE;
+        cellHeight += 8 * SIZE;
+        int columns = Math.max(1, (int) Math.ceil(Math.sqrt(chipInstances.size())));
+        List<Vector> cellOrigins = new ArrayList<>();
         for (int i = 0; i < chipInstances.size(); i++) {
             ChipInstance ci = chipInstances.get(i);
-            int chipY = i * chipPitchY;
-            chipYPositions.add(chipY);
-
+            int column = i % columns;
+            int row = i / columns;
+            cellOrigins.add(new Vector(16 * SIZE + column * cellWidth, 12 * SIZE + row * cellHeight));
             VisualElement chipVe = new VisualElement(ci.chipFile).setShapeFactory(shapeFactory);
             chipVe.getElementAttributes().set(Keys.LABEL, "IC" + ci.id + " (" + ci.chipType + ")");
             chipVisualElements.add(chipVe);
+            placeChipInCell(chipVe, cellOrigins.get(i), 0);
+        }
 
+        optimizeChipRotations(chipVisualElements, cellOrigins);
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance ci = chipInstances.get(i);
+            VisualElement chipVe = chipVisualElements.get(i);
+            GraphicMinMax bounds = chipVe.getMinMax(false);
+            List<Vector> pinPositions = new ArrayList<>();
+            for (Pin pin : chipVe.getPins()) {
+                pinPositions.add(pin.getPos());
+            }
+            chipGeometry.put(ci, new ChipGeometry(bounds.getMin(), bounds.getMax(), pinPositions));
             for (Gate g : ci.allocatedGates) {
                 int slot = g.slot;
-                registerGatePin(netRoutes, chipVe, chipY, slot + "A", g.inputNets.size() >= 1 ? g.inputNets.get(0) : null);
+                registerGatePin(netRoutes, chipVe, ci, slot + "A",
+                        g.inputNets.size() >= 1 ? g.inputNets.get(0) : null);
                 if (!"7404".equals(ci.chipType)) {
-                    registerGatePin(netRoutes, chipVe, chipY, slot + "B", g.inputNets.size() >= 2 ? g.inputNets.get(1) : null);
+                    registerGatePin(netRoutes, chipVe, ci, slot + "B",
+                            g.inputNets.size() >= 2 ? g.inputNets.get(1) : null);
                 }
                 if (g.outputNet != null) {
-                    registerGatePin(netRoutes, chipVe, chipY, slot + "Y", g.outputNet);
+                    registerGatePin(netRoutes, chipVe, ci, slot + "Y", g.outputNet);
                 }
             }
         }
         return chipVisualElements;
+    }
+
+    private void placeChipInCell(VisualElement chipVe, Vector cellOrigin, int rotation) {
+        chipVe.setRotation(rotation).setPos(new Vector(0, 0));
+        Vector min = chipVe.getMinMax(false).getMin();
+        chipVe.setPos(new Vector(alignToGrid(cellOrigin.x - min.x),
+                alignToGrid(cellOrigin.y - min.y)));
+    }
+
+    private void optimizeChipRotations(List<VisualElement> chipVisualElements, List<Vector> cellOrigins) {
+        boolean improved;
+        do {
+            improved = false;
+            long currentCost = calculateChipWiringCost(chipVisualElements);
+            for (int i = 0; i < chipVisualElements.size(); i++) {
+                VisualElement chipVe = chipVisualElements.get(i);
+                int currentRotation = chipVe.getRotate();
+                int bestRotation = currentRotation;
+                long bestCost = currentCost;
+                for (int rotation = 0; rotation < 4; rotation++) {
+                    if (rotation == currentRotation) {
+                        continue;
+                    }
+                    placeChipInCell(chipVe, cellOrigins.get(i), rotation);
+                    long cost = calculateChipWiringCost(chipVisualElements);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        bestRotation = rotation;
+                    }
+                }
+                placeChipInCell(chipVe, cellOrigins.get(i), bestRotation);
+                if (bestRotation != currentRotation) {
+                    currentCost = bestCost;
+                    improved = true;
+                }
+            }
+        } while (improved);
+    }
+
+    private long calculateChipWiringCost(List<VisualElement> chipVisualElements) {
+        Map<String, Vector> sourcePositions = new HashMap<>(inputPositions);
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance chip = chipInstances.get(i);
+            VisualElement chipVe = chipVisualElements.get(i);
+            for (Gate gate : chip.allocatedGates) {
+                if (gate.outputNet != null) {
+                    Vector position = getWorldPinPosition(chipVe, gate.slot + "Y");
+                    if (position != null) {
+                        sourcePositions.put(gate.outputNet, position);
+                    }
+                }
+            }
+        }
+
+        long cost = 0;
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance chip = chipInstances.get(i);
+            VisualElement chipVe = chipVisualElements.get(i);
+            for (Gate gate : chip.allocatedGates) {
+                for (int pin = 0; pin < gate.inputNets.size(); pin++) {
+                    Vector source = sourcePositions.get(gate.inputNets.get(pin));
+                    Vector target = getWorldPinPosition(chipVe, gate.slot + (pin == 0 ? "A" : "B"));
+                    if (source != null && target != null) {
+                        cost += Math.abs(source.x - target.x) + Math.abs(source.y - target.y);
+                    }
+                }
+            }
+        }
+        return cost;
+    }
+
+    private int getChipLayoutMaxX() {
+        int maxX = 0;
+        for (ChipGeometry geometry : chipGeometry.values()) {
+            maxX = Math.max(maxX, geometry.max.x);
+        }
+        return maxX;
+    }
+
+    private int alignToGrid(int coordinate) {
+        return (int) Math.ceil((double) coordinate / SIZE) * SIZE;
     }
 
     private Map<String, Integer> calculateOutputPositions(LinkedHashMap<String, String> combResultNets,
@@ -289,22 +749,16 @@ public class CircuitBuilder74xx {
             int targetY = -1;
             NetRoute nr = netRoutes.get(netName);
             if (nr != null) {
-                for (Endpoint ep : nr.rightEndpoints) {
-                    if (ep.side == PinSide.CHIP_RIGHT) {
-                        targetY = ep.y;
+                List<Endpoint> endpoints = new ArrayList<>(nr.leftEndpoints);
+                endpoints.addAll(nr.rightEndpoints);
+                for (Endpoint endpoint : endpoints) {
+                    if (endpoint.chip != null && endpoint.output) {
+                        targetY = endpoint.position.y;
                         break;
                     }
                 }
-                if (targetY < 0) {
-                    for (Endpoint ep : nr.leftEndpoints) {
-                        if (ep.side == PinSide.CHIP_LEFT) {
-                            targetY = ep.y;
-                            break;
-                        }
-                    }
-                }
-                if (targetY < 0 && !nr.leftEndpoints.isEmpty()) {
-                    targetY = nr.leftEndpoints.get(0).y;
+                if (targetY < 0 && !endpoints.isEmpty()) {
+                    targetY = endpoints.get(0).position.y;
                 }
             }
             if (targetY < 0) {
@@ -329,24 +783,36 @@ public class CircuitBuilder74xx {
 
     private void registerOutputEndpoints(LinkedHashMap<String, String> combResultNets,
                                          Map<String, NetRoute> netRoutes,
-                                         Map<String, Integer> outputYMap) {
+                                         Map<String, Integer> outputYMap, int xOutput) {
         for (Map.Entry<String, String> entry : combResultNets.entrySet()) {
             String outName = entry.getKey();
             String netName = entry.getValue();
             if (!"CONST_0".equals(netName) && !"CONST_1".equals(netName)) {
                 int y = outputYMap.get(outName);
-                getRoute(netRoutes, netName).rightEndpoints.add(new Endpoint(PinSide.OUTPUT, y));
+                Vector position = new Vector(xOutput, y);
+                fixedRoutePoints.add(toRoutePoint(position));
+                getRoute(netRoutes, netName).rightEndpoints.add(new Endpoint(
+                        PinSide.OUTPUT, position, new Vector(-1, 0)));
             }
         }
     }
 
     private void classifyNets(Map<String, NetRoute> netRoutes,
-                              List<String> leftNets, List<String> rightNets, Set<String> bridgedNets) {
+                              List<String> leftNets, List<String> rightNets, Set<String> bridgedNets,
+                              Map<String, List<LocalConnection>> localConnections,
+                              Set<String> directChipNets) {
         for (Map.Entry<String, NetRoute> entry : netRoutes.entrySet()) {
             String name = entry.getKey();
             NetRoute route = entry.getValue();
-            boolean hasLeft = !route.leftEndpoints.isEmpty();
-            boolean hasRight = !route.rightEndpoints.isEmpty();
+            if (directChipNets.contains(name)) {
+                bridgedNets.add(name);
+                continue;
+            }
+            Set<Endpoint> localEndpoints = getLocalEndpointsToSkip(route, localConnections.get(name));
+            boolean directOutput = isDirectOutputNet(route);
+            boolean hasLeft = !directOutput
+                    && hasExternallyRoutedEndpoint(route.leftEndpoints, localEndpoints);
+            boolean hasRight = hasExternallyRoutedEndpoint(route.rightEndpoints, localEndpoints);
             if (hasLeft) {
                 leftNets.add(name);
             }
@@ -359,20 +825,17 @@ public class CircuitBuilder74xx {
         }
     }
 
-    private void placeChipsInCircuit(Circuit circuit, List<VisualElement> chipVisualElements,
-                                     List<Integer> chipYPositions, int xChip) {
+    private void placeChipsInCircuit(Circuit circuit, List<VisualElement> chipVisualElements) {
         for (int i = 0; i < chipVisualElements.size(); i++) {
             VisualElement chipVe = chipVisualElements.get(i);
-            int chipY = chipYPositions.get(i);
-            chipVe.setPos(new Vector(xChip, chipY));
             circuit.add(chipVe);
 
             ChipInstance ci = chipInstances.get(i);
             for (Gate g : ci.allocatedGates) {
                 if (g.outputNet == null) {
-                    tunnelUnusedPin(circuit, chipVe, xChip, chipY, g.slot + "A");
+                    tunnelUnusedPin(circuit, chipVe, g.slot + "A");
                     if (!"7404".equals(ci.chipType)) {
-                        tunnelUnusedPin(circuit, chipVe, xChip, chipY, g.slot + "B");
+                        tunnelUnusedPin(circuit, chipVe, g.slot + "B");
                     }
                 }
             }
@@ -403,6 +866,7 @@ public class CircuitBuilder74xx {
             if ("CONST_0".equals(netName)) {
                 Vector wireEnd = outPos.add(-2 * SIZE, 0);
                 circuit.add(new Wire(wireEnd, outPos));
+                registerFixedTrack(wireEnd, outPos, "CONST_0");
                 VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
                 tunnel.getElementAttributes().set(Keys.NETNAME, "CONST_0").set(Keys.ROTATE, new Rotation(2));
                 tunnel.setPos(wireEnd);
@@ -411,6 +875,7 @@ public class CircuitBuilder74xx {
             } else if ("CONST_1".equals(netName)) {
                 Vector wireEnd = outPos.add(-2 * SIZE, 0);
                 circuit.add(new Wire(wireEnd, outPos));
+                registerFixedTrack(wireEnd, outPos, "CONST_1");
                 VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
                 tunnel.getElementAttributes().set(Keys.NETNAME, "CONST_1").set(Keys.ROTATE, new Rotation(2));
                 tunnel.setPos(wireEnd);
@@ -425,43 +890,259 @@ public class CircuitBuilder74xx {
         return netRoutes.computeIfAbsent(name, k -> new NetRoute());
     }
 
-    private void registerGatePin(Map<String, NetRoute> netRoutes, VisualElement chipVe, int chipY,
+    private void registerGatePin(Map<String, NetRoute> netRoutes, VisualElement chipVe, ChipInstance chip,
                                  String pinName, String netName) {
         if (netName == null || "CONST_0".equals(netName) || "CONST_1".equals(netName)) {
             return;
         }
         Vector offset = getPinOffset(chipVe, pinName);
-        if (offset == null) {
+        Vector position = getWorldPinPosition(chipVe, pinName);
+        if (offset == null || position == null) {
             return;
         }
-        boolean isLeft = (offset.x == 0);
-        int py = chipY + offset.y;
-        if (isLeft) {
-            getRoute(netRoutes, netName).leftEndpoints.add(new Endpoint(PinSide.CHIP_LEFT, py));
+        Vector normal = getPinOutwardNormal(chipVe, offset);
+        PinSide side = getChipPinSide(normal);
+        Endpoint endpoint = new Endpoint(side, position, normal, chip, pinName.endsWith("Y"));
+        fixedRoutePoints.add(toRoutePoint(position));
+        RoutePoint escape = getEscapePoint(endpoint);
+        fixedRoutePoints.add(escape);
+        addTrackPoints(toRoutePoint(position), escape, netName);
+        if (side == PinSide.CHIP_LEFT || side == PinSide.CHIP_TOP) {
+            getRoute(netRoutes, netName).leftEndpoints.add(
+                    endpoint);
         } else {
-            getRoute(netRoutes, netName).rightEndpoints.add(new Endpoint(PinSide.CHIP_RIGHT, py));
+            getRoute(netRoutes, netName).rightEndpoints.add(
+                    endpoint);
         }
     }
 
-    private void tunnelUnusedPin(Circuit circuit, VisualElement chipVe, int chipX, int chipY, String pinName) {
+    private Vector getWorldPinPosition(VisualElement chipVe, String pinName) {
+        for (Pin pin : chipVe.getPins()) {
+            if (pin.getName().equalsIgnoreCase(pinName)) {
+                return pin.getPos();
+            }
+        }
+        return null;
+    }
+
+    private Vector getPinOutwardNormal(VisualElement chipVe, Vector localPosition) {
+        int maxX = 0;
+        for (Pin pin : chipVe.getShape().getPins()) {
+            maxX = Math.max(maxX, pin.getPos().x);
+        }
+        int normalX = localPosition.x == 0 ? -1 : localPosition.x == maxX ? 1 : 0;
+        int normalY = 0;
+        switch (chipVe.getRotate()) {
+            case 1:
+                return new Vector(normalY, -normalX);
+            case 2:
+                return new Vector(-normalX, -normalY);
+            case 3:
+                return new Vector(-normalY, normalX);
+            default:
+                return new Vector(normalX, normalY);
+        }
+    }
+
+    private PinSide getChipPinSide(Vector normal) {
+        if (normal.x < 0) {
+            return PinSide.CHIP_LEFT;
+        } else if (normal.x > 0) {
+            return PinSide.CHIP_RIGHT;
+        } else if (normal.y < 0) {
+            return PinSide.CHIP_TOP;
+        } else {
+            return PinSide.CHIP_BOTTOM;
+        }
+    }
+
+    private boolean hasExternallyRoutedEndpoint(List<Endpoint> endpoints, Set<Endpoint> localEndpoints) {
+        for (Endpoint endpoint : endpoints) {
+            if (!localEndpoints.contains(endpoint)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, List<LocalConnection>> assignLocalConnections(Map<String, NetRoute> netRoutes) {
+        Map<ChipInstance, Map<PinSide, List<LocalConnection>>> connectionsByChip = new LinkedHashMap<>();
+        Map<String, List<LocalConnection>> selectedByNet = new LinkedHashMap<>();
+        for (Map.Entry<String, NetRoute> entry : netRoutes.entrySet()) {
+            NetRoute route = entry.getValue();
+            Map<ChipInstance, List<Endpoint>> pinsByChip = new LinkedHashMap<>();
+            List<Endpoint> endpoints = new ArrayList<>(route.leftEndpoints);
+            endpoints.addAll(route.rightEndpoints);
+            List<Endpoint> externalEndpoints = new ArrayList<>();
+            for (Endpoint endpoint : endpoints) {
+                if (endpoint.chip == null) {
+                    externalEndpoints.add(endpoint);
+                } else {
+                    pinsByChip.computeIfAbsent(endpoint.chip, k -> new ArrayList<Endpoint>()).add(endpoint);
+                }
+            }
+            boolean hasExternalInput = false;
+            for (Endpoint endpoint : externalEndpoints) {
+                if (endpoint.side == PinSide.INPUT) {
+                    hasExternalInput = true;
+                    break;
+                }
+            }
+            if (hasExternalInput) {
+                continue;
+            }
+
+            for (Map.Entry<ChipInstance, List<Endpoint>> chipEntry : pinsByChip.entrySet()) {
+                List<Endpoint> pins = chipEntry.getValue();
+                if (pins.size() < 2) {
+                    continue;
+                }
+                Endpoint source = chooseLocalAnchor(pins, externalEndpoints);
+                for (Endpoint target : pins) {
+                    if (target != source) {
+                        LocalConnection connection = new LocalConnection(entry.getKey(), source, target);
+                        connectionsByChip.computeIfAbsent(chipEntry.getKey(),
+                                k -> new LinkedHashMap<PinSide, List<LocalConnection>>())
+                                .computeIfAbsent(source.side, k -> new ArrayList<LocalConnection>())
+                                .add(connection);
+                    }
+                }
+            }
+        }
+
+        for (Map<PinSide, List<LocalConnection>> connectionsBySide : connectionsByChip.values()) {
+            for (List<LocalConnection> candidates : connectionsBySide.values()) {
+                Collections.sort(candidates, new Comparator<LocalConnection>() {
+                    @Override
+                    public int compare(LocalConnection first, LocalConnection second) {
+                        int firstDistance = Math.abs(first.source.y - first.target.y);
+                        int secondDistance = Math.abs(second.source.y - second.target.y);
+                        if (firstDistance != secondDistance) {
+                            return Integer.compare(firstDistance, secondDistance);
+                        }
+                        int sourceComparison = Integer.compare(first.source.y, second.source.y);
+                        return sourceComparison != 0 ? sourceComparison : first.netName.compareTo(second.netName);
+                    }
+                });
+
+                int trackCount = 0;
+                for (LocalConnection candidate : candidates) {
+                    if (trackCount == 5) {
+                        break;
+                    }
+                    candidate.track = trackCount++;
+                    selectedByNet.computeIfAbsent(candidate.netName, k -> new ArrayList<LocalConnection>())
+                            .add(candidate);
+                }
+            }
+        }
+        return selectedByNet;
+    }
+
+    private Endpoint chooseLocalAnchor(List<Endpoint> pins, List<Endpoint> externalEndpoints) {
+        for (Endpoint pin : pins) {
+            if (pin.output) {
+                return pin;
+            }
+        }
+
+        List<Endpoint> externalInputs = new ArrayList<>();
+        for (Endpoint external : externalEndpoints) {
+            if (external.side == PinSide.INPUT) {
+                externalInputs.add(external);
+            }
+        }
+
+        Endpoint anchor = null;
+        long bestCost = Long.MAX_VALUE;
+        for (Endpoint pin : pins) {
+            if (externalInputs.isEmpty()) {
+                if (anchor == null || pin.y < anchor.y) {
+                    anchor = pin;
+                }
+            } else {
+                for (Endpoint external : externalInputs) {
+                    long distance = Math.abs(pin.y - external.y);
+                    long sidePenalty = isWrongChipSide(external, pin) ? 24L * SIZE : 0;
+                    long cost = distance + sidePenalty;
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        anchor = pin;
+                    }
+                }
+            }
+        }
+        return anchor;
+    }
+
+    private boolean isWrongChipSide(Endpoint external, Endpoint pin) {
+        if (external.side == PinSide.INPUT) {
+            return pin.side != PinSide.CHIP_LEFT;
+        }
+        return false;
+    }
+
+    private Set<Endpoint> getLocalEndpointsToSkip(NetRoute route, List<LocalConnection> connections) {
+        Set<Endpoint> localEndpoints = new HashSet<>();
+        if (connections == null || connections.isEmpty()) {
+            return localEndpoints;
+        }
+
+        Set<Endpoint> localSources = new HashSet<>();
+        ChipInstance localChip = null;
+        boolean singleLocalChip = true;
+        for (LocalConnection connection : connections) {
+            localEndpoints.add(connection.target);
+            localSources.add(connection.source);
+            if (localChip == null) {
+                localChip = connection.source.chip;
+            } else if (localChip != connection.source.chip) {
+                singleLocalChip = false;
+            }
+        }
+
+        Set<Endpoint> connectedLocally = new HashSet<>(localEndpoints);
+        connectedLocally.addAll(localSources);
+        if (singleLocalChip
+                && route.leftEndpoints.size() + route.rightEndpoints.size() == connectedLocally.size()) {
+            localEndpoints.addAll(localSources);
+        }
+        return localEndpoints;
+    }
+
+    private void tunnelUnusedPin(Circuit circuit, VisualElement chipVe, String pinName) {
         Vector offset = getPinOffset(chipVe, pinName);
-        if (offset == null) {
+        Vector pinPos = getWorldPinPosition(chipVe, pinName);
+        if (offset == null || pinPos == null) {
             return;
         }
-        Vector pinPos = new Vector(chipX, chipY).add(offset);
-        boolean isLeft = (offset.x == 0);
-        int dx = isLeft ? -2 * SIZE : 2 * SIZE;
-        Vector wireEnd = pinPos.add(dx, 0);
+        Vector normal = getPinOutwardNormal(chipVe, offset);
+        Vector wireEnd = pinPos.add(normal.x * 2 * SIZE, normal.y * 2 * SIZE);
 
         circuit.add(new Wire(pinPos, wireEnd));
+        fixedRoutePoints.add(toRoutePoint(pinPos));
+        fixedRoutePoints.add(toRoutePoint(wireEnd));
+        addTrackPoints(toRoutePoint(pinPos), toRoutePoint(wireEnd), "CONST_0");
 
         VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
         tunnel.getElementAttributes()
                 .set(Keys.NETNAME, "CONST_0")
-                .set(Keys.ROTATE, new Rotation(isLeft ? 2 : 0));
+                .set(Keys.ROTATE, new Rotation(getRotationForNormal(normal)));
         tunnel.setPos(wireEnd);
         circuit.add(tunnel);
         const0Used = true;
+    }
+
+    private int getRotationForNormal(Vector normal) {
+        if (normal.x < 0) {
+            return 2;
+        } else if (normal.x > 0) {
+            return 0;
+        } else if (normal.y > 0) {
+            return 1;
+        } else {
+            return 3;
+        }
     }
 
     private static class SideConfig {
@@ -482,7 +1163,7 @@ public class CircuitBuilder74xx {
 
     private void routeNets(Circuit circuit, Map<String, NetRoute> netRoutes,
                            List<String> leftNets, List<String> rightNets, List<String> bridgedList,
-                           RoutingLayout layout) {
+                           RoutingLayout layout, Map<String, List<LocalConnection>> localConnections) {
 
         Map<String, Color> netColorMap = assignNetColors(netRoutes.keySet());
         Map<String, Integer> bridgeYMap = assignBridgeYCoordinates(bridgedList, netRoutes, layout);
@@ -492,17 +1173,48 @@ public class CircuitBuilder74xx {
             NetRoute route = entry.getValue();
             Color color = netColorMap.get(netName);
             int yBridge = bridgeYMap.getOrDefault(netName, -1);
-
-            if (!route.leftEndpoints.isEmpty()) {
-                int xTrunk = layout.xLeftTrackStart + leftNets.indexOf(netName) * layout.trackPitch;
-                SideConfig cfg = new SideConfig(xTrunk, layout.xInput, layout.xChip, PinSide.INPUT, color);
-                routeSide(circuit, route.leftEndpoints, cfg, yBridge);
+            List<LocalConnection> netLocalConnections = localConnections.get(netName);
+            Set<Endpoint> localEndpoints = getLocalEndpointsToSkip(route, netLocalConnections);
+            if (layout.directChipNets.contains(netName)) {
+                routeDirectChipConnection(circuit, route, yBridge, layout, color);
+                continue;
+            }
+            if (isDirectOutputNet(route)) {
+                routeDirectOutput(circuit, route, rightNets.indexOf(netName),
+                        layout.directLeftOutputTracks.getOrDefault(netName, -1),
+                        leftNets.size(), layout, color);
+                continue;
             }
 
-            if (!route.rightEndpoints.isEmpty()) {
+            if (netLocalConnections != null) {
+                for (LocalConnection connection : netLocalConnections) {
+                    int sourceEdgeX = getChipEdgeX(connection.source, layout);
+                    int targetEdgeX = getChipEdgeX(connection.target, layout);
+                    int trackX = connection.source.side == PinSide.CHIP_LEFT
+                            ? layout.xChip + (connection.track + 1) * SIZE
+                            : layout.xChipRight - (connection.track + 1) * SIZE;
+                    circuit.add(new Wire(new Vector(sourceEdgeX, connection.source.y),
+                            new Vector(trackX, connection.source.y)).setColor(color));
+                    circuit.add(new Wire(new Vector(trackX, connection.source.y),
+                            new Vector(trackX, connection.target.y)).setColor(color));
+                    circuit.add(new Wire(new Vector(trackX, connection.target.y),
+                            new Vector(targetEdgeX, connection.target.y)).setColor(color));
+                }
+            }
+
+            List<Endpoint> leftEndpoints = getExternallyRoutedEndpoints(route.leftEndpoints, localEndpoints);
+            List<Endpoint> rightEndpoints = getExternallyRoutedEndpoints(route.rightEndpoints, localEndpoints);
+
+            if (!leftEndpoints.isEmpty()) {
+                int xTrunk = layout.xLeftTrackStart + leftNets.indexOf(netName) * layout.trackPitch;
+                SideConfig cfg = new SideConfig(xTrunk, layout.xInput, layout.xChip, PinSide.INPUT, color);
+                routeSide(circuit, leftEndpoints, cfg, yBridge);
+            }
+
+            if (!rightEndpoints.isEmpty()) {
                 int xTrunk = layout.xRightTrackStart + rightNets.indexOf(netName) * layout.trackPitch;
                 SideConfig cfg = new SideConfig(xTrunk, layout.xOutput, layout.xChipRight, PinSide.OUTPUT, color);
-                routeSide(circuit, route.rightEndpoints, cfg, yBridge);
+                routeSide(circuit, rightEndpoints, cfg, yBridge);
             }
 
             if (yBridge >= 0) {
@@ -511,13 +1223,659 @@ public class CircuitBuilder74xx {
                 circuit.add(new Wire(new Vector(xTrunkLeft, yBridge), new Vector(xTrunkRight, yBridge)).setColor(color));
             }
         }
+
+    }
+
+    private void routeGridNets(Circuit circuit, Map<String, NetRoute> netRoutes, int xOutput)
+            throws BuilderException {
+        Map<String, Color> colors = assignNetColors(netRoutes.keySet());
+        ArrayList<Wire> routedWires = new ArrayList<>();
+        Set<RoutePoint> occupied = new HashSet<>(fixedRoutePoints);
+        RouteBounds bounds = getRouteBounds(netRoutes, xOutput);
+        List<Map.Entry<String, NetRoute>> orderedRoutes = new ArrayList<>(netRoutes.entrySet());
+        Collections.sort(orderedRoutes, new Comparator<Map.Entry<String, NetRoute>>() {
+            @Override
+            public int compare(Map.Entry<String, NetRoute> first, Map.Entry<String, NetRoute> second) {
+                int spanComparison = Long.compare(getRouteSpan(first.getValue()),
+                        getRouteSpan(second.getValue()));
+                if (spanComparison != 0) {
+                    return spanComparison;
+                }
+                int firstCount = getRouteEndpoints(first.getValue()).size();
+                int secondCount = getRouteEndpoints(second.getValue()).size();
+                return Integer.compare(secondCount, firstCount);
+            }
+        });
+
+        for (Map.Entry<String, NetRoute> entry : orderedRoutes) {
+            currentRouteNet = entry.getKey();
+            List<Endpoint> endpoints = getRouteEndpoints(entry.getValue());
+            if (endpoints.size() < 2) {
+                continue;
+            }
+
+            Endpoint source = chooseRouteSource(endpoints);
+            RoutePoint sourcePin = toRoutePoint(source.position);
+            Endpoint localTarget = getDirectSameChipTarget(endpoints, source);
+            if (localTarget != null) {
+                RoutePoint targetPin = toRoutePoint(localTarget.position);
+                Set<RoutePoint> protectedPins = getOtherPinPositions(netRoutes, source, localTarget);
+                Set<RoutePoint> sameNet = getEndpointRoutePoints(endpoints);
+                List<RoutePoint> directPath = findOrthogonalPath(sourcePin, targetPin,
+                        occupied, sameNet, bounds,
+                        source.chip, protectedPins);
+                if (directPath == null) {
+                    directPath = findPathWithExpandedBounds(sourcePin, targetPin,
+                            occupied, sameNet, bounds, source.chip, protectedPins);
+                }
+                if (directPath == null) {
+                    throw new BuilderException("Unable to route same-chip net " + entry.getKey());
+                }
+                addOrthogonalWires(routedWires, directPath, colors.get(entry.getKey()));
+                addRouteEndpoints(occupied, directPath, entry.getKey());
+                continue;
+            }
+
+            RoutePoint sourceEscape = getEscapePoint(source);
+            Set<RoutePoint> sameNet = getEndpointRoutePoints(endpoints);
+            List<List<RoutePoint>> netPaths = new ArrayList<>();
+
+            for (Endpoint target : endpoints) {
+                if (target == source) {
+                    continue;
+                }
+                RoutePoint targetPin = toRoutePoint(target.position);
+                RoutePoint targetEscape = getEscapePoint(target);
+                List<RoutePoint> path = findOrthogonalPath(sourceEscape, targetEscape,
+                        occupied, sameNet, bounds, null, Collections.<RoutePoint>emptySet());
+                if (path == null) {
+                    path = findPathWithExpandedBounds(sourceEscape, targetEscape, occupied, sameNet,
+                            bounds, null, Collections.<RoutePoint>emptySet());
+                }
+                if (path == null) {
+                    throw new BuilderException("Unable to route net " + entry.getKey()
+                            + " around chip footprints");
+                }
+
+                List<RoutePoint> netPoints = new ArrayList<>();
+                netPoints.add(sourcePin);
+                netPoints.add(sourceEscape);
+                netPoints.addAll(path);
+                netPoints.add(targetEscape);
+                netPoints.add(targetPin);
+                netPaths.add(netPoints);
+
+                sameNet.addAll(path);
+                sameNet.add(targetPin);
+                sameNet.add(targetEscape);
+                addSegmentPoints(sameNet, targetEscape, targetPin);
+            }
+
+            for (List<RoutePoint> netPath : netPaths) {
+                addOrthogonalWires(routedWires, netPath, colors.get(entry.getKey()));
+                addRouteEndpoints(occupied, netPath, entry.getKey());
+            }
+        }
+        currentRouteNet = null;
+        circuit.add(routedWires);
+    }
+
+    private void addRouteEndpoints(Set<RoutePoint> occupied, List<RoutePoint> routePoints, String netName) {
+        List<RoutePoint> simplified = simplifyRoutePoints(routePoints);
+        occupied.addAll(simplified);
+        for (int i = 1; i < simplified.size(); i++) {
+            addTrackPoints(simplified.get(i - 1), simplified.get(i), netName);
+        }
+    }
+
+    private void addTrackPoints(RoutePoint first, RoutePoint second, String netName) {
+        int direction = first.y == second.y ? 1 : 2;
+        int dx = Integer.compare(second.x, first.x) * SIZE;
+        int dy = Integer.compare(second.y, first.y) * SIZE;
+        RoutePoint point = first;
+        while (true) {
+            Map<String, Integer> trackDirections = occupiedTrackDirections.computeIfAbsent(
+                    point, key -> new HashMap<String, Integer>());
+            Integer existing = trackDirections.get(netName);
+            trackDirections.put(netName, (existing == null ? 0 : existing) | direction);
+            if (point.equals(second)) {
+                return;
+            }
+            point = point.add(dx, dy);
+        }
+    }
+
+    private List<RoutePoint> findPathWithExpandedBounds(RoutePoint start, RoutePoint goal,
+                                                         Set<RoutePoint> occupied,
+                                                         Set<RoutePoint> sameNet,
+                                                         RouteBounds bounds,
+                                                         ChipInstance allowedChip,
+                                                         Set<RoutePoint> protectedPins) {
+        RouteBounds expandedBounds = bounds;
+        for (int attempt = 0; attempt < 8; attempt++) {
+            expandedBounds = expandRouteBounds(expandedBounds, 48 * SIZE);
+            List<RoutePoint> path = findOrthogonalPath(start, goal, occupied, sameNet,
+                    expandedBounds, allowedChip, protectedPins);
+            if (path != null) {
+                return path;
+            }
+        }
+        return null;
+    }
+
+    private Set<RoutePoint> getEndpointRoutePoints(List<Endpoint> endpoints) {
+        Set<RoutePoint> points = new HashSet<>();
+        for (Endpoint endpoint : endpoints) {
+            RoutePoint pin = toRoutePoint(endpoint.position);
+            RoutePoint escape = getEscapePoint(endpoint);
+            addSegmentPoints(points, pin, escape);
+        }
+        return points;
+    }
+
+    private void addSegmentPoints(Set<RoutePoint> points, RoutePoint first, RoutePoint second) {
+        int dx = Integer.compare(second.x, first.x) * SIZE;
+        int dy = Integer.compare(second.y, first.y) * SIZE;
+        RoutePoint point = first;
+        while (!point.equals(second)) {
+            points.add(point);
+            point = point.add(dx, dy);
+        }
+        points.add(second);
+    }
+
+    private void addSegmentPoints(Set<RoutePoint> points, RoutePoint first, Vector second) {
+        addSegmentPoints(points, first, toRoutePoint(second));
+    }
+
+    private RouteBounds expandRouteBounds(RouteBounds bounds, int amount) {
+        return new RouteBounds(bounds.minX - amount, bounds.maxX + amount,
+                bounds.minY - amount, bounds.maxY + amount);
+    }
+
+    private List<Endpoint> getRouteEndpoints(NetRoute route) {
+        List<Endpoint> endpoints = new ArrayList<>(route.leftEndpoints);
+        endpoints.addAll(route.rightEndpoints);
+        return endpoints;
+    }
+
+    private long getRouteSpan(NetRoute route) {
+        List<Endpoint> endpoints = getRouteEndpoints(route);
+        long span = 0;
+        for (int first = 0; first < endpoints.size(); first++) {
+            for (int second = first + 1; second < endpoints.size(); second++) {
+                span = Math.max(span, manhattanDistance(endpoints.get(first).position,
+                        endpoints.get(second).position));
+            }
+        }
+        return span;
+    }
+
+    private static final int[][] ROUTE_DIRECTIONS = new int[][]{
+            {1, 0}, {0, 1}, {-1, 0}, {0, -1}
+    };
+
+    private static class RouteBounds {
+        private final int minX;
+        private final int maxX;
+        private final int minY;
+        private final int maxY;
+
+        RouteBounds(int minX, int maxX, int minY, int maxY) {
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minY = minY;
+            this.maxY = maxY;
+        }
+    }
+
+    private RouteBounds getRouteBounds(Map<String, NetRoute> netRoutes, int xOutput) {
+        int minX = -ROUTE_MARGIN;
+        int maxX = xOutput + ROUTE_MARGIN;
+        int minY = -ROUTE_MARGIN;
+        int maxY = ROUTE_MARGIN;
+        for (ChipGeometry geometry : chipGeometry.values()) {
+            minX = Math.min(minX, geometry.min.x - ROUTE_MARGIN);
+            maxX = Math.max(maxX, geometry.max.x + ROUTE_MARGIN);
+            minY = Math.min(minY, geometry.min.y - ROUTE_MARGIN);
+            maxY = Math.max(maxY, geometry.max.y + ROUTE_MARGIN);
+        }
+        for (NetRoute route : netRoutes.values()) {
+            for (Endpoint endpoint : route.leftEndpoints) {
+                minX = Math.min(minX, endpoint.position.x - ROUTE_MARGIN);
+                maxX = Math.max(maxX, endpoint.position.x + ROUTE_MARGIN);
+                minY = Math.min(minY, endpoint.position.y - ROUTE_MARGIN);
+                maxY = Math.max(maxY, endpoint.position.y + ROUTE_MARGIN);
+            }
+            for (Endpoint endpoint : route.rightEndpoints) {
+                minX = Math.min(minX, endpoint.position.x - ROUTE_MARGIN);
+                maxX = Math.max(maxX, endpoint.position.x + ROUTE_MARGIN);
+                minY = Math.min(minY, endpoint.position.y - ROUTE_MARGIN);
+                maxY = Math.max(maxY, endpoint.position.y + ROUTE_MARGIN);
+            }
+        }
+        return new RouteBounds(minX, maxX, minY, maxY);
+    }
+
+    private Endpoint chooseRouteSource(List<Endpoint> endpoints) {
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.chip != null && endpoint.output) {
+                return endpoint;
+            }
+        }
+        return endpoints.get(0);
+    }
+
+    private Endpoint getDirectSameChipTarget(List<Endpoint> endpoints, Endpoint source) {
+        if (endpoints.size() != 2 || source.chip == null || !source.output) {
+            return null;
+        }
+        Endpoint target = endpoints.get(0) == source ? endpoints.get(1) : endpoints.get(0);
+        return target.chip == source.chip && !target.output ? target : null;
+    }
+
+    private Set<RoutePoint> getOtherPinPositions(Map<String, NetRoute> netRoutes,
+                                                  Endpoint first, Endpoint second) {
+        Set<RoutePoint> positions = new HashSet<>();
+        ChipGeometry geometry = chipGeometry.get(first.chip);
+        for (Vector pinPosition : geometry.pinPositions) {
+            RoutePoint point = toRoutePoint(pinPosition);
+            if (!point.equals(toRoutePoint(first.position))
+                    && !point.equals(toRoutePoint(second.position))) {
+                positions.add(point);
+            }
+        }
+        for (NetRoute route : netRoutes.values()) {
+            for (Endpoint endpoint : route.leftEndpoints) {
+                addProtectedPin(positions, endpoint, first, second);
+            }
+            for (Endpoint endpoint : route.rightEndpoints) {
+                addProtectedPin(positions, endpoint, first, second);
+            }
+        }
+        return positions;
+    }
+
+    private void addProtectedPin(Set<RoutePoint> positions, Endpoint endpoint,
+                                 Endpoint first, Endpoint second) {
+        if (endpoint.chip == first.chip && endpoint != first && endpoint != second) {
+            positions.add(toRoutePoint(endpoint.position));
+        }
+    }
+
+    private RoutePoint toRoutePoint(Vector position) {
+        return new RoutePoint(position.x, position.y);
+    }
+
+    private RoutePoint getEscapePoint(Endpoint endpoint) {
+        if (endpoint.chip == null) {
+            return toRoutePoint(endpoint.position);
+        }
+        return new RoutePoint(endpoint.position.x + endpoint.normal.x * 2 * SIZE,
+                endpoint.position.y + endpoint.normal.y * 2 * SIZE);
+    }
+
+    private List<RoutePoint> findOrthogonalPath(RoutePoint start, RoutePoint goal,
+                                                 Set<RoutePoint> occupied, Set<RoutePoint> sameNet,
+                                                 RouteBounds bounds, ChipInstance allowedChip,
+                                                 Set<RoutePoint> protectedPins) {
+        PriorityQueue<RouteSearchNode> open = new PriorityQueue<>();
+        Map<String, Integer> bestCosts = new HashMap<>();
+        RouteSearchNode initial = new RouteSearchNode(start, -1, 0, routeHeuristic(start, goal), null);
+        open.add(initial);
+        bestCosts.put(routeSearchKey(start, -1), 0);
+
+        while (!open.isEmpty()) {
+            RouteSearchNode current = open.poll();
+            if (current.point.equals(goal)) {
+                return reconstructRoute(current);
+            }
+            if (current.cost > bestCosts.getOrDefault(
+                    routeSearchKey(current.point, current.direction), Integer.MAX_VALUE)) {
+                continue;
+            }
+
+            for (int direction = 0; direction < ROUTE_DIRECTIONS.length; direction++) {
+                RoutePoint next = current.point.add(ROUTE_DIRECTIONS[direction][0] * SIZE,
+                        ROUTE_DIRECTIONS[direction][1] * SIZE);
+                if (!isWithinRouteBounds(next, bounds)
+                        || (!next.equals(goal) && isInsideChip(next, allowedChip))
+                        || (protectedPins.contains(next) && !next.equals(goal))) {
+                    continue;
+                }
+                if (occupied.contains(next) && !sameNet.contains(next)) {
+                    continue;
+                }
+                if (!canContinueAcrossTrack(current, direction)) {
+                    continue;
+                }
+                Integer nextTrack = getForeignTrackDirections(next);
+                int routeDirection = direction % 2 == 0 ? 1 : 2;
+                if (nextTrack != null && (next.equals(goal) || (nextTrack & routeDirection) != 0)) {
+                    continue;
+                }
+
+                int stepCost = 10;
+                if (current.direction >= 0 && current.direction != direction) {
+                    stepCost += ROUTE_BEND_COST * 10;
+                }
+                if (!sameNet.contains(next) && isNearOccupiedTrack(next, occupied)) {
+                    stepCost += 2;
+                }
+                int cost = current.cost + stepCost;
+                String key = routeSearchKey(next, direction);
+                if (cost < bestCosts.getOrDefault(key, Integer.MAX_VALUE)) {
+                    bestCosts.put(key, cost);
+                    open.add(new RouteSearchNode(next, direction, cost,
+                            routeHeuristic(next, goal), current));
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean canContinueAcrossTrack(RouteSearchNode current, int nextDirection) {
+        Integer trackDirections = getForeignTrackDirections(current.point);
+        if (trackDirections == null) {
+            return true;
+        }
+        int routeDirection = current.direction % 2 == 0 ? 1 : 2;
+        return current.direction == nextDirection && (trackDirections & routeDirection) == 0;
+    }
+
+    private Integer getForeignTrackDirections(RoutePoint point) {
+        Map<String, Integer> trackDirections = occupiedTrackDirections.get(point);
+        if (trackDirections == null) {
+            return null;
+        }
+        int directions = 0;
+        for (Map.Entry<String, Integer> entry : trackDirections.entrySet()) {
+            if (!entry.getKey().equals(currentRouteNet)) {
+                directions |= entry.getValue();
+            }
+        }
+        return directions == 0 ? null : directions;
+    }
+
+    private boolean isWithinRouteBounds(RoutePoint point, RouteBounds bounds) {
+        return point.x >= bounds.minX && point.x <= bounds.maxX
+                && point.y >= bounds.minY && point.y <= bounds.maxY;
+    }
+
+    private boolean isInsideChip(RoutePoint point, ChipInstance allowedChip) {
+        for (Map.Entry<ChipInstance, ChipGeometry> entry : chipGeometry.entrySet()) {
+            if (entry.getKey() == allowedChip) {
+                continue;
+            }
+            ChipGeometry geometry = entry.getValue();
+            if (point.x >= geometry.min.x - SIZE && point.x <= geometry.max.x + SIZE
+                    && point.y >= geometry.min.y - SIZE && point.y <= geometry.max.y + SIZE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isNearOccupiedTrack(RoutePoint point, Set<RoutePoint> occupied) {
+        for (int[] direction : ROUTE_DIRECTIONS) {
+            if (occupied.contains(point.add(direction[0] * SIZE, direction[1] * SIZE))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int routeHeuristic(RoutePoint first, RoutePoint second) {
+        return (Math.abs(first.x - second.x) + Math.abs(first.y - second.y)) / SIZE * 10;
+    }
+
+    private String routeSearchKey(RoutePoint point, int direction) {
+        return point.x + ":" + point.y + ":" + direction;
+    }
+
+    private List<RoutePoint> reconstructRoute(RouteSearchNode end) {
+        List<RoutePoint> path = new ArrayList<>();
+        for (RouteSearchNode node = end; node != null; node = node.previous) {
+            path.add(node.point);
+        }
+        Collections.reverse(path);
+        return path;
+    }
+
+    private void addOrthogonalWires(ArrayList<Wire> wires, List<RoutePoint> points, Color color) {
+        List<RoutePoint> simplified = simplifyRoutePoints(points);
+        for (int i = 1; i < simplified.size(); i++) {
+            RoutePoint first = simplified.get(i - 1);
+            RoutePoint second = simplified.get(i);
+            if (first.x == second.x || first.y == second.y) {
+                wires.add(new Wire(first.toVector(), second.toVector()).setColor(color));
+            } else {
+                wires.add(new Wire(first.toVector(), new Vector(second.x, first.y)).setColor(color));
+                wires.add(new Wire(new Vector(second.x, first.y), second.toVector()).setColor(color));
+            }
+        }
+    }
+
+    private List<RoutePoint> simplifyRoutePoints(List<RoutePoint> points) {
+        List<RoutePoint> simplified = new ArrayList<>();
+        for (RoutePoint point : points) {
+            if (simplified.isEmpty() || !simplified.get(simplified.size() - 1).equals(point)) {
+                while (simplified.size() >= 2 && isCollinear(
+                        simplified.get(simplified.size() - 2),
+                        simplified.get(simplified.size() - 1), point)) {
+                    simplified.remove(simplified.size() - 1);
+                }
+                simplified.add(point);
+            }
+        }
+        return simplified;
+    }
+
+    private boolean isCollinear(RoutePoint first, RoutePoint second, RoutePoint third) {
+        return (first.x == second.x && second.x == third.x)
+                || (first.y == second.y && second.y == third.y);
+    }
+
+    private int getChipEdgeX(Endpoint endpoint, RoutingLayout layout) {
+        return endpoint.side == PinSide.CHIP_LEFT ? layout.xChip : layout.xChipRight;
+    }
+
+    private Set<String> getDirectChipNets(Map<String, NetRoute> netRoutes,
+                                          Map<String, List<LocalConnection>> localConnections) {
+        Set<String> directNets = new HashSet<>();
+        for (Map.Entry<String, NetRoute> entry : netRoutes.entrySet()) {
+            if (localConnections.containsKey(entry.getKey())) {
+                continue;
+            }
+            List<Endpoint> endpoints = new ArrayList<>(entry.getValue().leftEndpoints);
+            endpoints.addAll(entry.getValue().rightEndpoints);
+            if (endpoints.size() != 2 || endpoints.get(0).chip == null || endpoints.get(1).chip == null
+                    || endpoints.get(0).chip == endpoints.get(1).chip
+                    || endpoints.get(0).output == endpoints.get(1).output) {
+                continue;
+            }
+            directNets.add(entry.getKey());
+        }
+        return directNets;
+    }
+
+    private void routeDirectChipConnection(Circuit circuit, NetRoute route, int yBridge,
+                                           RoutingLayout layout, Color color) {
+        Endpoint source = null;
+        Endpoint target = null;
+        for (Endpoint endpoint : route.leftEndpoints) {
+            if (endpoint.chip != null) {
+                if (endpoint.output) {
+                    source = endpoint;
+                } else {
+                    target = endpoint;
+                }
+            }
+        }
+        for (Endpoint endpoint : route.rightEndpoints) {
+            if (endpoint.chip != null) {
+                if (endpoint.output) {
+                    source = endpoint;
+                } else {
+                    target = endpoint;
+                }
+            }
+        }
+        if (source == null || target == null) {
+            return;
+        }
+
+        int sourceIndex = chipInstances.indexOf(source.chip);
+        int targetIndex = chipInstances.indexOf(target.chip);
+        int firstGap = Math.min(sourceIndex, targetIndex);
+        int lastGap = Math.max(sourceIndex, targetIndex) - 1;
+        int originalGap = 0;
+        int bestGapDistance = Integer.MAX_VALUE;
+        for (int gap = 0; gap < layout.numChips; gap++) {
+            int gapBaseY = gap * layout.chipPitchY + 15 * SIZE;
+            int distance = Math.abs(yBridge - gapBaseY);
+            if (distance < bestGapDistance) {
+                bestGapDistance = distance;
+                originalGap = gap;
+            }
+        }
+        int gapIndex = Math.max(firstGap, Math.min(lastGap, originalGap));
+        int gapLaneOffset = yBridge - originalGap * layout.chipPitchY - 15 * SIZE;
+        int gapY = gapIndex * layout.chipPitchY + 15 * SIZE + gapLaneOffset;
+        int sourceOutsideX = source.side == PinSide.CHIP_LEFT
+                ? layout.xChip - SIZE : layout.xChipRight + SIZE;
+        int targetOutsideX = target.side == PinSide.CHIP_LEFT
+                ? layout.xChip - SIZE : layout.xChipRight + SIZE;
+
+        addWire(circuit, source, sourceOutsideX, layout, color);
+        circuit.add(new Wire(new Vector(sourceOutsideX, source.y),
+                new Vector(sourceOutsideX, gapY)).setColor(color));
+        if (sourceOutsideX != targetOutsideX) {
+            circuit.add(new Wire(new Vector(sourceOutsideX, gapY),
+                    new Vector(targetOutsideX, gapY)).setColor(color));
+        }
+        circuit.add(new Wire(new Vector(targetOutsideX, gapY),
+                new Vector(targetOutsideX, target.y)).setColor(color));
+        addWire(circuit, target, targetOutsideX, layout, color);
+    }
+
+    private void addWire(Circuit circuit, Endpoint endpoint, int outsideX,
+                         RoutingLayout layout, Color color) {
+        int edgeX = getChipEdgeX(endpoint, layout);
+        circuit.add(new Wire(new Vector(edgeX, endpoint.y),
+                new Vector(outsideX, endpoint.y)).setColor(color));
+    }
+
+    private boolean isDirectOutputNet(NetRoute route) {
+        Endpoint chipOutput = null;
+        Endpoint output = null;
+        int endpointCount = route.leftEndpoints.size() + route.rightEndpoints.size();
+        if (endpointCount != 2) {
+            return false;
+        }
+        List<Endpoint> endpoints = new ArrayList<>(route.leftEndpoints);
+        endpoints.addAll(route.rightEndpoints);
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.chip == null && endpoint.side == PinSide.OUTPUT) {
+                output = endpoint;
+            } else if (endpoint.chip != null && endpoint.output) {
+                chipOutput = endpoint;
+            } else {
+                return false;
+            }
+        }
+        return chipOutput != null && output != null;
+    }
+
+    private Map<String, Integer> getDirectLeftOutputTracks(Map<String, NetRoute> netRoutes) {
+        Map<String, Integer> tracks = new LinkedHashMap<>();
+        for (Map.Entry<String, NetRoute> entry : netRoutes.entrySet()) {
+            NetRoute route = entry.getValue();
+            if (!isDirectOutputNet(route)) {
+                continue;
+            }
+            for (Endpoint endpoint : route.leftEndpoints) {
+                if (endpoint.chip != null && endpoint.output
+                        && endpoint.side == PinSide.CHIP_LEFT) {
+                    tracks.put(entry.getKey(), tracks.size());
+                    break;
+                }
+            }
+        }
+        return tracks;
+    }
+
+    private void routeDirectOutput(Circuit circuit, NetRoute route, int trackIndex,
+                                   int directOutputTrack, int leftTrackCount, RoutingLayout layout,
+                                   Color color) {
+        Endpoint chipOutput = null;
+        Endpoint output = null;
+        List<Endpoint> endpoints = new ArrayList<>(route.leftEndpoints);
+        endpoints.addAll(route.rightEndpoints);
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.chip == null) {
+                output = endpoint;
+            } else {
+                chipOutput = endpoint;
+            }
+        }
+
+        int xTrunk = layout.xRightTrackStart + trackIndex * layout.trackPitch;
+        int sourceEdgeX = getChipEdgeX(chipOutput, layout);
+        if (chipOutput.side == PinSide.CHIP_RIGHT) {
+            circuit.add(new Wire(new Vector(sourceEdgeX, chipOutput.y),
+                    new Vector(xTrunk, chipOutput.y)).setColor(color));
+        } else {
+            int chipY = chipInstances.indexOf(chipOutput.chip) * layout.chipPitchY;
+            int topLaneY = chipY - 2 * SIZE;
+            int bottomLaneY = chipY + 14 * SIZE;
+            int laneY = Math.abs(chipOutput.y - topLaneY) + Math.abs(output.y - topLaneY)
+                    <= Math.abs(chipOutput.y - bottomLaneY) + Math.abs(output.y - bottomLaneY)
+                    ? topLaneY : bottomLaneY;
+            int outsideX = layout.xLeftTrackStart
+                    + (leftTrackCount + directOutputTrack + 1) * layout.trackPitch;
+            circuit.add(new Wire(new Vector(sourceEdgeX, chipOutput.y),
+                    new Vector(outsideX, chipOutput.y)).setColor(color));
+            circuit.add(new Wire(new Vector(outsideX, chipOutput.y),
+                    new Vector(outsideX, laneY)).setColor(color));
+            circuit.add(new Wire(new Vector(outsideX, laneY),
+                    new Vector(xTrunk, laneY)).setColor(color));
+        }
+        int sourceY = chipOutput.side == PinSide.CHIP_RIGHT
+                ? chipOutput.y : getDirectOutputLaneY(chipOutput, output, layout);
+        circuit.add(new Wire(new Vector(xTrunk, sourceY),
+                new Vector(xTrunk, output.y)).setColor(color));
+        circuit.add(new Wire(new Vector(xTrunk, output.y),
+                new Vector(layout.xOutput, output.y)).setColor(color));
+    }
+
+    private int getDirectOutputLaneY(Endpoint chipOutput, Endpoint output, RoutingLayout layout) {
+        int chipY = chipInstances.indexOf(chipOutput.chip) * layout.chipPitchY;
+        int topLaneY = chipY - 2 * SIZE;
+        int bottomLaneY = chipY + 14 * SIZE;
+        return Math.abs(chipOutput.y - topLaneY) + Math.abs(output.y - topLaneY)
+                <= Math.abs(chipOutput.y - bottomLaneY) + Math.abs(output.y - bottomLaneY)
+                ? topLaneY : bottomLaneY;
     }
 
     private Map<String, Color> assignNetColors(Set<String> netNames) {
         Map<String, Color> map = new HashMap<>();
+        Set<Color> usedColors = new HashSet<>();
         int idx = 0;
         for (String name : netNames) {
-            map.put(name, NET_COLORS[idx % NET_COLORS.length]);
+            Color color;
+            if (idx < NET_COLORS.length) {
+                color = NET_COLORS[idx];
+            } else {
+                int candidateIndex = idx - NET_COLORS.length;
+                do {
+                    float hue = (float) ((candidateIndex * 0.6180339887498949) % 1.0);
+                    color = Color.getHSBColor(hue, 0.75f, 0.95f);
+                    candidateIndex++;
+                } while (usedColors.contains(color));
+            }
+            usedColors.add(color);
+            map.put(name, color);
             idx++;
         }
         return map;
@@ -528,15 +1886,27 @@ public class CircuitBuilder74xx {
                                                           RoutingLayout layout) {
         Map<String, Integer> bridgeYMap = new HashMap<>();
         Map<Integer, Integer> gapUsage = new HashMap<>();
+        List<String> orderedBridges = new ArrayList<>(bridgedList);
+        Collections.sort(orderedBridges, new Comparator<String>() {
+            @Override
+            public int compare(String first, String second) {
+                int firstY = computeAverageY(netRoutes.get(first));
+                int secondY = computeAverageY(netRoutes.get(second));
+                int firstGap = findBestGap(firstY, layout.numChips, layout.chipPitchY);
+                int secondGap = findBestGap(secondY, layout.numChips, layout.chipPitchY);
+                int gapComparison = Integer.compare(firstGap, secondGap);
+                return gapComparison != 0 ? gapComparison : Integer.compare(firstY, secondY);
+            }
+        });
 
-        for (String netName : bridgedList) {
+        for (String netName : orderedBridges) {
             NetRoute route = netRoutes.get(netName);
             int yAvg = computeAverageY(route);
             int gapIdx = findBestGap(yAvg, layout.numChips, layout.chipPitchY);
             int count = gapUsage.getOrDefault(gapIdx, 0);
             gapUsage.put(gapIdx, count + 1);
 
-            int yBridge = computeGapTrackY(gapIdx, count, layout, gapUsage);
+            int yBridge = computeGapTrackY(gapIdx, count, layout);
             bridgeYMap.put(netName, yBridge);
         }
         return bridgeYMap;
@@ -578,17 +1948,10 @@ public class CircuitBuilder74xx {
     }
 
     private int getGapCenter(int gapIdx, int chipPitchY) {
-        return gapIdx * chipPitchY + 19 * SIZE;
+        return gapIdx * chipPitchY + (chipPitchY + 14 * SIZE) / 2;
     }
 
-    private int computeGapTrackY(int gapIdx, int trackIdx, RoutingLayout layout, Map<Integer, Integer> gapUsage) {
-        int maxPerGap = 4;
-        if (gapIdx < layout.numChips - 1 && trackIdx >= maxPerGap) {
-            int lastGap = layout.numChips - 1;
-            int overflowIdx = gapUsage.getOrDefault(lastGap, 0);
-            gapUsage.put(lastGap, overflowIdx + 1);
-            return lastGap * layout.chipPitchY + (15 + overflowIdx * 2) * SIZE;
-        }
+    private int computeGapTrackY(int gapIdx, int trackIdx, RoutingLayout layout) {
         return gapIdx * layout.chipPitchY + (15 + trackIdx * 2) * SIZE;
     }
 
@@ -623,6 +1986,7 @@ public class CircuitBuilder74xx {
             circuit.add(vdd);
             Vector wireEnd = new Vector(xInput + 2 * SIZE, yInput);
             circuit.add(new Wire(new Vector(xInput, yInput), wireEnd));
+            registerFixedTrack(new Vector(xInput, yInput), wireEnd, "CONST_1");
             VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
             tunnel.getElementAttributes().set(Keys.NETNAME, "CONST_1");
             tunnel.setPos(wireEnd);
@@ -635,11 +1999,20 @@ public class CircuitBuilder74xx {
             circuit.add(gnd);
             Vector wireEnd = new Vector(xInput + 2 * SIZE, yInput);
             circuit.add(new Wire(new Vector(xInput, yInput), wireEnd));
+            registerFixedTrack(new Vector(xInput, yInput), wireEnd, "CONST_0");
             VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
             tunnel.getElementAttributes().set(Keys.NETNAME, "CONST_0");
             tunnel.setPos(wireEnd);
             circuit.add(tunnel);
         }
+    }
+
+    private void registerFixedTrack(Vector first, Vector second, String netName) {
+        RoutePoint start = toRoutePoint(first);
+        RoutePoint end = toRoutePoint(second);
+        fixedRoutePoints.add(start);
+        fixedRoutePoints.add(end);
+        addTrackPoints(start, end, netName);
     }
 
     private LinkedHashSet<String> findInputVariables() {
@@ -970,14 +2343,26 @@ public class CircuitBuilder74xx {
     }
 
     private static class Gate {
-        private final int slot;
+        private int slot;
         private final List<String> inputNets;
         private final String outputNet;
 
         Gate(int slot, List<String> inputNets, String outputNet) {
             this.slot = slot;
-            this.inputNets = inputNets;
+            this.inputNets = new ArrayList<>(inputNets);
             this.outputNet = outputNet;
+        }
+    }
+
+    private static class GatePinPositions {
+        private final Vector inputA;
+        private final Vector inputB;
+        private final Vector output;
+
+        GatePinPositions(Vector inputA, Vector inputB, Vector output) {
+            this.inputA = inputA;
+            this.inputB = inputB;
+            this.output = output;
         }
     }
 }
