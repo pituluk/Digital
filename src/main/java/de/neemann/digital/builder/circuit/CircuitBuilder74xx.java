@@ -91,6 +91,7 @@ public class CircuitBuilder74xx {
 
     private final List<ChipInstance> chipInstances = new ArrayList<>();
     private final Map<ChipInstance, ChipGeometry> chipGeometry = new LinkedHashMap<>();
+    private final Map<RoutePoint, Set<ChipInstance>> chipFootprintPoints = new HashMap<>();
     private final Map<String, Vector> inputPositions = new LinkedHashMap<>();
     private final Set<RoutePoint> fixedRoutePoints = new HashSet<>();
     private final Map<RoutePoint, Map<String, Integer>> occupiedTrackDirections = new HashMap<>();
@@ -347,6 +348,7 @@ public class CircuitBuilder74xx {
         Map<String, NetRoute> inputRoutes = new LinkedHashMap<>();
         inputPositions.clear();
         chipGeometry.clear();
+        chipFootprintPoints.clear();
         fixedRoutePoints.clear();
         occupiedTrackDirections.clear();
 
@@ -401,16 +403,17 @@ public class CircuitBuilder74xx {
             return;
         }
 
+        EstimatedChipLayout estimatedLayout = createEstimatedChipLayout();
         boolean improved;
         do {
             improved = false;
-            long bestCost = calculateChipPlacementCost(inputs);
+            long bestCost = calculateChipPlacementCost(inputs, estimatedLayout);
             int bestFirst = -1;
             int bestSecond = -1;
             for (int first = 0; first < chipInstances.size(); first++) {
                 for (int second = first + 1; second < chipInstances.size(); second++) {
                     Collections.swap(chipInstances, first, second);
-                    long cost = calculateChipPlacementCost(inputs);
+                    long cost = calculateChipPlacementCost(inputs, estimatedLayout);
                     Collections.swap(chipInstances, first, second);
                     if (cost < bestCost) {
                         bestCost = cost;
@@ -426,7 +429,7 @@ public class CircuitBuilder74xx {
         } while (improved);
     }
 
-    private long calculateChipPlacementCost(LinkedHashSet<String> inputs) {
+    private long calculateChipPlacementCost(LinkedHashSet<String> inputs, EstimatedChipLayout estimatedLayout) {
         Map<String, Vector> inputPositions = new HashMap<>();
         int nextInputY = SIZE;
         for (String input : inputs) {
@@ -434,14 +437,27 @@ public class CircuitBuilder74xx {
             nextInputY += 4 * SIZE;
         }
 
-        Map<ChipInstance, Map<Integer, GatePinPositions>> pinPositions = createEstimatedPinPositions();
         Map<String, Vector> sourcePositions = new HashMap<>(inputPositions);
-        for (ChipInstance chip : chipInstances) {
+        Map<ChipInstance, Map<Integer, GatePinPositions>> pinPositions = new LinkedHashMap<>();
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance chip = chipInstances.get(i);
+            Map<Integer, GatePinPositions> chipOffsets = estimatedLayout.pinOffsets.get(chip);
+            Vector cellOrigin = estimatedLayout.cellOrigins.get(i);
+            Map<Integer, GatePinPositions> chipPins = new HashMap<>();
             for (Gate gate : chip.allocatedGates) {
                 if (gate.outputNet != null) {
-                    sourcePositions.put(gate.outputNet, pinPositions.get(chip).get(gate.slot).output);
+                    GatePinPositions offsets = chipOffsets.get(gate.slot);
+                    GatePinPositions pins = translatePinPositions(offsets, cellOrigin);
+                    chipPins.put(gate.slot, pins);
+                    sourcePositions.put(gate.outputNet, pins.output);
                 }
             }
+            for (Gate gate : chip.allocatedGates) {
+                if (!chipPins.containsKey(gate.slot)) {
+                    chipPins.put(gate.slot, translatePinPositions(chipOffsets.get(gate.slot), cellOrigin));
+                }
+            }
+            pinPositions.put(chip, chipPins);
         }
 
         long cost = 0;
@@ -459,6 +475,53 @@ public class CircuitBuilder74xx {
             }
         }
         return cost;
+    }
+
+    private EstimatedChipLayout createEstimatedChipLayout() {
+        int cellWidth = 0;
+        int cellHeight = 0;
+        for (ChipInstance chip : chipInstances) {
+            VisualElement measure = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
+            for (int rotation = 0; rotation < 4; rotation++) {
+                measure.setRotation(rotation).setPos(new Vector(0, 0));
+                GraphicMinMax bounds = measure.getMinMax(false);
+                cellWidth = Math.max(cellWidth, bounds.getMax().x - bounds.getMin().x);
+                cellHeight = Math.max(cellHeight, bounds.getMax().y - bounds.getMin().y);
+            }
+        }
+        cellWidth += CHIP_CELL_MARGIN;
+        cellHeight += CHIP_CELL_MARGIN;
+        int columns = Math.max(1, (int) Math.ceil(Math.sqrt(chipInstances.size())));
+        List<Vector> cellOrigins = new ArrayList<>();
+        Map<ChipInstance, Map<Integer, GatePinPositions>> pinOffsets = new LinkedHashMap<>();
+        for (int i = 0; i < chipInstances.size(); i++) {
+            ChipInstance chip = chipInstances.get(i);
+            Vector cellOrigin = new Vector(CHIP_START_X + (i % columns) * cellWidth,
+                    CHIP_START_Y + (i / columns) * cellHeight);
+            cellOrigins.add(cellOrigin);
+            VisualElement chipVe = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
+            placeChipInCell(chipVe, cellOrigin, 0);
+            Map<Integer, GatePinPositions> chipPins = new HashMap<>();
+            for (int slot = 1; slot <= chip.maxSlots; slot++) {
+                chipPins.put(slot, new GatePinPositions(
+                        relativePosition(getWorldPinPosition(chipVe, slot + "A"), cellOrigin),
+                        relativePosition(getWorldPinPosition(chipVe, slot + "B"), cellOrigin),
+                        relativePosition(getWorldPinPosition(chipVe, slot + "Y"), cellOrigin)));
+            }
+            pinOffsets.put(chip, chipPins);
+        }
+        return new EstimatedChipLayout(cellOrigins, pinOffsets);
+    }
+
+    private Vector relativePosition(Vector position, Vector origin) {
+        return position == null ? null : position.sub(origin);
+    }
+
+    private GatePinPositions translatePinPositions(GatePinPositions positions, Vector offset) {
+        return new GatePinPositions(
+                positions.inputA == null ? null : positions.inputA.add(offset),
+                positions.inputB == null ? null : positions.inputB.add(offset),
+                positions.output == null ? null : positions.output.add(offset));
     }
 
     private void optimizePinAllocation(LinkedHashSet<String> inputs) {
@@ -696,7 +759,24 @@ public class CircuitBuilder74xx {
                 }
             }
         }
+        indexChipFootprints();
         return chipVisualElements;
+    }
+
+    private void indexChipFootprints() {
+        for (Map.Entry<ChipInstance, ChipGeometry> entry : chipGeometry.entrySet()) {
+            ChipGeometry geometry = entry.getValue();
+            int minX = alignToGrid(geometry.min.x - SIZE);
+            int maxX = geometry.max.x + SIZE;
+            int minY = alignToGrid(geometry.min.y - SIZE);
+            int maxY = geometry.max.y + SIZE;
+            for (int x = minX; x <= maxX; x += SIZE) {
+                for (int y = minY; y <= maxY; y += SIZE) {
+                    RoutePoint point = new RoutePoint(x, y);
+                    chipFootprintPoints.computeIfAbsent(point, key -> new HashSet<>()).add(entry.getKey());
+                }
+            }
+        }
     }
 
     private void placeChipInCell(VisualElement chipVe, Vector cellOrigin, int rotation) {
@@ -1290,7 +1370,7 @@ public class CircuitBuilder74xx {
                 int spanComparison = Long.compare(getRouteSpan(first.getValue()),
                         getRouteSpan(second.getValue()));
                 if (spanComparison != 0) {
-                    return -spanComparison;
+                    return spanComparison;
                 }
                 return 0;
             }
@@ -1345,7 +1425,8 @@ public class CircuitBuilder74xx {
                     throw new BuilderException("Unable to route net " + entry.getKey()
                             + " from (" + sourceEscape.x + "," + sourceEscape.y + ") to ("
                             + targetEscape.x + "," + targetEscape.y + ") around chip footprints; "
-                            + endpoints.size() + " endpoints");
+                            + endpoints.size() + " endpoints; source " + describeEndpoint(source)
+                            + ", target " + describeEndpoint(target));
                 }
 
                 List<RoutePoint> netPoints = new ArrayList<>();
@@ -1369,6 +1450,15 @@ public class CircuitBuilder74xx {
         }
         currentRouteNet = null;
         circuit.add(routedWires);
+    }
+
+    private String describeEndpoint(Endpoint endpoint) {
+        String description = endpoint.side + " pin (" + endpoint.position.x + "," + endpoint.position.y + ") "
+                + "normal (" + endpoint.normal.x + "," + endpoint.normal.y + ") on ";
+        if (endpoint.chip == null) {
+            return description + "circuit IO";
+        }
+        return description + endpoint.chip.chipType + " IC" + endpoint.chip.id;
     }
 
     private void addRouteEndpoints(Set<RoutePoint> occupied, List<RoutePoint> routePoints, String netName) {
@@ -1571,18 +1661,20 @@ public class CircuitBuilder74xx {
                                                  RouteBounds bounds, ChipInstance allowedChip,
                                                  Set<RoutePoint> protectedPins) {
         PriorityQueue<RouteSearchNode> open = new PriorityQueue<>();
-        Map<String, Integer> bestCosts = new HashMap<>();
+        Map<RoutePoint, int[]> bestCosts = new HashMap<>();
         RouteSearchNode initial = new RouteSearchNode(start, -1, 0, routeHeuristic(start, goal), null);
         open.add(initial);
-        bestCosts.put(routeSearchKey(start, -1), 0);
+        int[] initialCosts = new int[ROUTE_DIRECTIONS.length + 1];
+        Arrays.fill(initialCosts, Integer.MAX_VALUE);
+        initialCosts[0] = 0;
+        bestCosts.put(start, initialCosts);
 
         while (!open.isEmpty()) {
             RouteSearchNode current = open.poll();
             if (current.point.equals(goal)) {
                 return reconstructRoute(current);
             }
-            if (current.cost > bestCosts.getOrDefault(
-                    routeSearchKey(current.point, current.direction), Integer.MAX_VALUE)) {
+            if (current.cost > bestCosts.get(current.point)[current.direction + 1]) {
                 continue;
             }
 
@@ -1614,9 +1706,14 @@ public class CircuitBuilder74xx {
                     stepCost += 2;
                 }
                 int cost = current.cost + stepCost;
-                String key = routeSearchKey(next, direction);
-                if (cost < bestCosts.getOrDefault(key, Integer.MAX_VALUE)) {
-                    bestCosts.put(key, cost);
+                int[] nextCosts = bestCosts.get(next);
+                if (nextCosts == null) {
+                    nextCosts = new int[ROUTE_DIRECTIONS.length + 1];
+                    Arrays.fill(nextCosts, Integer.MAX_VALUE);
+                    bestCosts.put(next, nextCosts);
+                }
+                if (cost < nextCosts[direction + 1]) {
+                    nextCosts[direction + 1] = cost;
                     open.add(new RouteSearchNode(next, direction, cost,
                             routeHeuristic(next, goal), current));
                 }
@@ -1654,14 +1751,12 @@ public class CircuitBuilder74xx {
     }
 
     private boolean isInsideChip(RoutePoint point, ChipInstance allowedChip) {
-        for (Map.Entry<ChipInstance, ChipGeometry> entry : chipGeometry.entrySet()) {
-            if (entry.getKey() == allowedChip) {
-                continue;
-            }
-            ChipGeometry geometry = entry.getValue();
-            if (point.x >= geometry.min.x - SIZE && point.x <= geometry.max.x + SIZE
-                    && point.y >= geometry.min.y - SIZE && point.y <= geometry.max.y + SIZE) {
-                return true;
+        Set<ChipInstance> chips = chipFootprintPoints.get(point);
+        if (chips != null) {
+            for (ChipInstance chip : chips) {
+                if (chip != allowedChip) {
+                    return true;
+                }
             }
         }
         return false;
@@ -1678,10 +1773,6 @@ public class CircuitBuilder74xx {
 
     private int routeHeuristic(RoutePoint first, RoutePoint second) {
         return (Math.abs(first.x - second.x) + Math.abs(first.y - second.y)) / SIZE * 10;
-    }
-
-    private String routeSearchKey(RoutePoint point, int direction) {
-        return point.x + ":" + point.y + ":" + direction;
     }
 
     private List<RoutePoint> reconstructRoute(RouteSearchNode end) {
@@ -2462,6 +2553,17 @@ public class CircuitBuilder74xx {
             this.inputA = inputA;
             this.inputB = inputB;
             this.output = output;
+        }
+    }
+
+    private static class EstimatedChipLayout {
+        private final List<Vector> cellOrigins;
+        private final Map<ChipInstance, Map<Integer, GatePinPositions>> pinOffsets;
+
+        EstimatedChipLayout(List<Vector> cellOrigins,
+                            Map<ChipInstance, Map<Integer, GatePinPositions>> pinOffsets) {
+            this.cellOrigins = cellOrigins;
+            this.pinOffsets = pinOffsets;
         }
     }
 }
