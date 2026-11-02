@@ -59,6 +59,9 @@ public class CircuitBuilder74xx {
     private static final int BASE_CHIP_PITCH_Y = 17 * SIZE;
     private static final int ROUTE_MARGIN = 24 * SIZE;
     private static final int ROUTE_BEND_COST = 4;
+    private static final int CHIP_CELL_MARGIN = 16 * SIZE;
+    private static final int CHIP_START_X = 16 * SIZE;
+    private static final int CHIP_START_Y = 12 * SIZE;
 
     private static final Color[] NET_COLORS = new Color[]{
             new Color(30, 144, 255),  // Dodger Blue
@@ -99,6 +102,40 @@ public class CircuitBuilder74xx {
 
     private enum PinSide {
         INPUT, CHIP_LEFT, CHIP_RIGHT, CHIP_TOP, CHIP_BOTTOM, OUTPUT
+    }
+
+    private void registerSequentialEndpoints(Map<String, NetRoute> netRoutes,
+                                             Map<String, String> seqResultNets, int xOutput, int yOutput,
+                                             boolean exposeSequentialOutputs) {
+        int stateY = yOutput;
+        for (Map.Entry<String, String> entry : seqResultNets.entrySet()) {
+            String stateName = entry.getKey();
+            String dNet = entry.getValue();
+            Vector pinPosition = new Vector(xOutput + 3 * SIZE, stateY);
+            Vector tunnelPosition = pinPosition.add(2 * SIZE, 0);
+            fixedRoutePoints.add(toRoutePoint(pinPosition));
+            fixedRoutePoints.add(toRoutePoint(tunnelPosition));
+            addTrackPoints(toRoutePoint(pinPosition), toRoutePoint(tunnelPosition), stateName);
+            getRoute(netRoutes, stateName).rightEndpoints.add(new Endpoint(
+                    PinSide.OUTPUT, tunnelPosition, new Vector(1, 0), null, true));
+
+            Vector dPinPosition = new Vector(xOutput, stateY);
+            Vector dTunnelPosition = dPinPosition.add(-2 * SIZE, 0);
+            fixedRoutePoints.add(toRoutePoint(dPinPosition));
+            fixedRoutePoints.add(toRoutePoint(dTunnelPosition));
+            addTrackPoints(toRoutePoint(dTunnelPosition), toRoutePoint(dPinPosition), dNet);
+            getRoute(netRoutes, dNet).leftEndpoints.add(new Endpoint(
+                    PinSide.INPUT, dTunnelPosition, new Vector(-1, 0)));
+
+            if (exposeSequentialOutputs) {
+                Vector outputPosition = new Vector(xOutput + 12 * SIZE, stateY);
+                fixedRoutePoints.add(toRoutePoint(outputPosition));
+                getRoute(netRoutes, stateName).rightEndpoints.add(new Endpoint(
+                        PinSide.OUTPUT, outputPosition, new Vector(-1, 0)));
+            }
+
+            stateY += 6 * SIZE;
+        }
     }
 
     private static class Endpoint {
@@ -300,6 +337,7 @@ public class CircuitBuilder74xx {
         for (Map.Entry<String, Expression> entry : sequentialOutputs.entrySet()) {
             seqResultNets.put(entry.getKey(), processExpression(entry.getValue()));
         }
+        boolean exposeSequentialOutputs = combinatorialOutputs.isEmpty();
 
         LinkedHashSet<String> inputs = findInputVariables();
         orderChipsByConnectivity(inputs);
@@ -312,7 +350,7 @@ public class CircuitBuilder74xx {
         fixedRoutePoints.clear();
         occupiedTrackDirections.clear();
 
-        int xInput = 0;
+        int xInput = getInputColumnX();
         int yInput = placeInputs(circuit, inputs, inputRoutes, xInput);
         Map<String, NetRoute> netRoutes = copyRoutes(inputRoutes);
         List<VisualElement> chipVisualElements = prepareChips(netRoutes);
@@ -322,13 +360,13 @@ public class CircuitBuilder74xx {
 
         placeChipsInCircuit(circuit, chipVisualElements);
         int yOutput = placeOutputsInCircuit(circuit, combResultNets, outputYMap, xOutput);
+        registerSequentialEndpoints(netRoutes, seqResultNets, xOutput, yOutput, exposeSequentialOutputs);
 
         placeConstants(circuit, xInput, yInput);
-        routeGridNets(circuit, netRoutes, xOutput);
-
         if (!seqResultNets.isEmpty()) {
-            placeSequential(circuit, seqResultNets, xOutput, yOutput);
+            placeSequential(circuit, seqResultNets, xOutput, yOutput, exposeSequentialOutputs);
         }
+        routeGridNets(circuit, netRoutes, xOutput);
 
         return circuit;
     }
@@ -516,15 +554,15 @@ public class CircuitBuilder74xx {
                 cellHeight = Math.max(cellHeight, bounds.getMax().y - bounds.getMin().y);
             }
         }
-        cellWidth += 8 * SIZE;
-        cellHeight += 8 * SIZE;
+        cellWidth += CHIP_CELL_MARGIN;
+        cellHeight += CHIP_CELL_MARGIN;
         int columns = Math.max(1, (int) Math.ceil(Math.sqrt(chipInstances.size())));
         Map<ChipInstance, Map<Integer, GatePinPositions>> positions = new LinkedHashMap<>();
         for (int i = 0; i < chipInstances.size(); i++) {
             ChipInstance chip = chipInstances.get(i);
             VisualElement chipVe = new VisualElement(chip.chipFile).setShapeFactory(shapeFactory);
-            Vector cellOrigin = new Vector(16 * SIZE + (i % columns) * cellWidth,
-                    12 * SIZE + (i / columns) * cellHeight);
+            Vector cellOrigin = new Vector(CHIP_START_X + (i % columns) * cellWidth,
+                    CHIP_START_Y + (i / columns) * cellHeight);
             placeChipInCell(chipVe, cellOrigin, 0);
             Map<Integer, GatePinPositions> chipPins = new HashMap<>();
             for (int slot = 1; slot <= chip.maxSlots; slot++) {
@@ -591,6 +629,7 @@ public class CircuitBuilder74xx {
             inVe.getElementAttributes().set(Keys.LABEL, inName);
             inVe.setPos(new Vector(xInput, yInput));
             circuit.add(inVe);
+            reserveElementFootprint(inVe);
 
             if (inVe.getPins().size() == 0) {
                 throw new BuilderException("Input element " + inName + " has no output pin");
@@ -618,15 +657,16 @@ public class CircuitBuilder74xx {
                 cellHeight = Math.max(cellHeight, bounds.getMax().y - bounds.getMin().y);
             }
         }
-        cellWidth += 8 * SIZE;
-        cellHeight += 8 * SIZE;
+        cellWidth += CHIP_CELL_MARGIN;
+        cellHeight += CHIP_CELL_MARGIN;
         int columns = Math.max(1, (int) Math.ceil(Math.sqrt(chipInstances.size())));
         List<Vector> cellOrigins = new ArrayList<>();
         for (int i = 0; i < chipInstances.size(); i++) {
             ChipInstance ci = chipInstances.get(i);
             int column = i % columns;
             int row = i / columns;
-            cellOrigins.add(new Vector(16 * SIZE + column * cellWidth, 12 * SIZE + row * cellHeight));
+            cellOrigins.add(new Vector(CHIP_START_X + column * cellWidth,
+                    CHIP_START_Y + row * cellHeight));
             VisualElement chipVe = new VisualElement(ci.chipFile).setShapeFactory(shapeFactory);
             chipVe.getElementAttributes().set(Keys.LABEL, "IC" + ci.id + " (" + ci.chipType + ")");
             chipVisualElements.add(chipVe);
@@ -734,6 +774,10 @@ public class CircuitBuilder74xx {
             maxX = Math.max(maxX, geometry.max.x);
         }
         return maxX;
+    }
+
+    private int getInputColumnX() {
+        return chipInstances.isEmpty() ? 0 : CHIP_START_X - 12 * SIZE;
     }
 
     private int alignToGrid(int coordinate) {
@@ -862,6 +906,7 @@ public class CircuitBuilder74xx {
             outVe.getElementAttributes().set(Keys.LABEL, outName);
             outVe.setPos(outPos);
             circuit.add(outVe);
+            reserveElementFootprint(outVe);
 
             if ("CONST_0".equals(netName)) {
                 Vector wireEnd = outPos.add(-2 * SIZE, 0);
@@ -1236,14 +1281,18 @@ public class CircuitBuilder74xx {
         Collections.sort(orderedRoutes, new Comparator<Map.Entry<String, NetRoute>>() {
             @Override
             public int compare(Map.Entry<String, NetRoute> first, Map.Entry<String, NetRoute> second) {
+                int firstCount = getRouteEndpoints(first.getValue()).size();
+                int secondCount = getRouteEndpoints(second.getValue()).size();
+                int endpointComparison = Integer.compare(firstCount, secondCount);
+                if (endpointComparison != 0) {
+                    return endpointComparison;
+                }
                 int spanComparison = Long.compare(getRouteSpan(first.getValue()),
                         getRouteSpan(second.getValue()));
                 if (spanComparison != 0) {
-                    return spanComparison;
+                    return -spanComparison;
                 }
-                int firstCount = getRouteEndpoints(first.getValue()).size();
-                int secondCount = getRouteEndpoints(second.getValue()).size();
-                return Integer.compare(secondCount, firstCount);
+                return 0;
             }
         });
 
@@ -1294,7 +1343,9 @@ public class CircuitBuilder74xx {
                 }
                 if (path == null) {
                     throw new BuilderException("Unable to route net " + entry.getKey()
-                            + " around chip footprints");
+                            + " from (" + sourceEscape.x + "," + sourceEscape.y + ") to ("
+                            + targetEscape.x + "," + targetEscape.y + ") around chip footprints; "
+                            + endpoints.size() + " endpoints");
                 }
 
                 List<RoutePoint> netPoints = new ArrayList<>();
@@ -1459,7 +1510,7 @@ public class CircuitBuilder74xx {
 
     private Endpoint chooseRouteSource(List<Endpoint> endpoints) {
         for (Endpoint endpoint : endpoints) {
-            if (endpoint.chip != null && endpoint.output) {
+            if (endpoint.output) {
                 return endpoint;
             }
         }
@@ -1984,6 +2035,7 @@ public class CircuitBuilder74xx {
             VisualElement vdd = new VisualElement(VDD.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
             vdd.setPos(new Vector(xInput, yInput));
             circuit.add(vdd);
+            reserveElementFootprint(vdd);
             Vector wireEnd = new Vector(xInput + 2 * SIZE, yInput);
             circuit.add(new Wire(new Vector(xInput, yInput), wireEnd));
             registerFixedTrack(new Vector(xInput, yInput), wireEnd, "CONST_1");
@@ -1997,6 +2049,7 @@ public class CircuitBuilder74xx {
             VisualElement gnd = new VisualElement(Ground.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
             gnd.setPos(new Vector(xInput, yInput));
             circuit.add(gnd);
+            reserveElementFootprint(gnd);
             Vector wireEnd = new Vector(xInput + 2 * SIZE, yInput);
             circuit.add(new Wire(new Vector(xInput, yInput), wireEnd));
             registerFixedTrack(new Vector(xInput, yInput), wireEnd, "CONST_0");
@@ -2037,9 +2090,11 @@ public class CircuitBuilder74xx {
         return inputs;
     }
 
-    private void placeSequential(Circuit circuit, LinkedHashMap<String, String> seqResultNets, int xOutput, int yOutput) {
+    private void placeSequential(Circuit circuit, LinkedHashMap<String, String> seqResultNets,
+                                 int xOutput, int yOutput, boolean exposeSequentialOutputs) {
         int clkX = xOutput - 4 * SIZE;
         int clkYMin = yOutput;
+        int clkYMax = yOutput + (seqResultNets.size() - 1) * 6 * SIZE + SIZE;
 
         for (Map.Entry<String, String> entry : seqResultNets.entrySet()) {
             String stateName = entry.getKey();
@@ -2050,6 +2105,7 @@ public class CircuitBuilder74xx {
             Vector ffPos = new Vector(xOutput, yOutput);
             ff.setPos(ffPos);
             circuit.add(ff);
+            reserveElementFootprint(ff);
 
             Vector dPinPos = ffPos;
             circuit.add(new Wire(dPinPos.add(-2 * SIZE, 0), dPinPos));
@@ -2061,6 +2117,7 @@ public class CircuitBuilder74xx {
             circuit.add(dTunnel);
 
             circuit.add(new Wire(new Vector(clkX, ffPos.y + SIZE), new Vector(ffPos.x, ffPos.y + SIZE)));
+            reserveWire(new Vector(clkX, ffPos.y + SIZE), new Vector(ffPos.x, ffPos.y + SIZE));
 
             Vector qPinPos = ffPos.add(SIZE * 3, 0);
             circuit.add(new Wire(qPinPos, qPinPos.add(2 * SIZE, 0)));
@@ -2068,6 +2125,16 @@ public class CircuitBuilder74xx {
             qTunnel.getElementAttributes().set(Keys.NETNAME, stateName);
             qTunnel.setPos(qPinPos.add(2 * SIZE, 0));
             circuit.add(qTunnel);
+
+            if (exposeSequentialOutputs) {
+                VisualElement out = new VisualElement(Out.DESCRIPTION.getName()).setShapeFactory(shapeFactory);
+                out.getElementAttributes().set(Keys.LABEL, getSequentialOutputName(stateName));
+                checkPinNumber(out, getSequentialOutputName(stateName));
+                Vector outPosition = new Vector(xOutput + 12 * SIZE, ffPos.y);
+                out.setPos(outPosition);
+                circuit.add(out);
+                reserveElementFootprint(out);
+            }
 
             yOutput += 6 * SIZE;
         }
@@ -2081,7 +2148,39 @@ public class CircuitBuilder74xx {
                 .set(Keys.FREQUENCY, 2)
                 .set(Keys.RUN_AT_REAL_TIME, true);
         circuit.add(clock);
-        circuit.add(new Wire(new Vector(clkX, clkYMin - 2 * SIZE), new Vector(clkX, yOutput - SIZE * 5)));
+        reserveElementFootprint(clock);
+        Vector clockTop = new Vector(clkX, clkYMin - 2 * SIZE);
+        Vector clockBottom = new Vector(clkX, clkYMax);
+        circuit.add(new Wire(clockTop, clockBottom));
+        reserveWire(clockTop, clockBottom);
+    }
+
+    private String getSequentialOutputName(String stateName) {
+        String outputName = stateName;
+        if (outputName.endsWith("n")) {
+            outputName = outputName.substring(0, outputName.length() - 1);
+            if (outputName.endsWith("_") || outputName.endsWith("^")) {
+                outputName = outputName.substring(0, outputName.length() - 1);
+            }
+        }
+        return outputName;
+    }
+
+    private void reserveElementFootprint(VisualElement element) {
+        GraphicMinMax bounds = element.getMinMax(false);
+        Vector min = bounds.getMin();
+        Vector max = bounds.getMax();
+        for (int x = alignToGrid(min.x); x <= max.x; x += SIZE) {
+            for (int y = alignToGrid(min.y); y <= max.y; y += SIZE) {
+                fixedRoutePoints.add(new RoutePoint(x, y));
+            }
+        }
+    }
+
+    private void reserveWire(Vector first, Vector second) {
+        Set<RoutePoint> points = new HashSet<>();
+        addSegmentPoints(points, toRoutePoint(first), toRoutePoint(second));
+        fixedRoutePoints.addAll(points);
     }
 
     private Vector getPinOffset(VisualElement ve, String pinName) {

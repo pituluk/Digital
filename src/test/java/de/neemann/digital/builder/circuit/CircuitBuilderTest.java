@@ -8,6 +8,7 @@ package de.neemann.digital.builder.circuit;
 import de.neemann.digital.TestExecuter;
 import de.neemann.digital.analyse.ModelAnalyser;
 import de.neemann.digital.analyse.TruthTable;
+import de.neemann.digital.analyse.quinemc.BoolTableByteArray;
 import de.neemann.digital.analyse.expression.Constant;
 import de.neemann.digital.analyse.expression.Expression;
 import de.neemann.digital.analyse.expression.NamedExpression;
@@ -17,11 +18,13 @@ import de.neemann.digital.analyse.parser.Parser;
 import de.neemann.digital.builder.BuilderException;
 import de.neemann.digital.core.NodeException;
 import de.neemann.digital.core.element.Keys;
+import de.neemann.digital.core.flipflops.FlipflopD;
 import de.neemann.digital.core.io.Const;
 import de.neemann.digital.core.io.In;
 import de.neemann.digital.core.io.Out;
 import de.neemann.digital.core.memory.LookUpTable;
 import de.neemann.digital.draw.elements.Circuit;
+import de.neemann.digital.draw.elements.Pin;
 import de.neemann.digital.draw.elements.PinException;
 import de.neemann.digital.draw.elements.Tunnel;
 import de.neemann.digital.draw.elements.VisualElement;
@@ -491,6 +494,165 @@ public class CircuitBuilderTest extends TestCase {
             assertEquals(0, wire.p1.y % SIZE);
             assertEquals(0, wire.p2.x % SIZE);
             assertEquals(0, wire.p2.y % SIZE);
+        }
+    }
+
+    public void testBuilder74xxSequentialCounter() throws Exception {
+        Variable y0 = new Variable("Y_0");
+        Variable y1 = new Variable("Y_1");
+        Expression y1Next = or(and(not(y0), y1), and(y0, not(y1)));
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addSequential("Y_0", not(y0))
+                .addSequential("Y_1", y1Next)
+                .addCombinatorial("Y_0_out", y0)
+                .addCombinatorial("Y_1_out", y1)
+                .createCircuit();
+
+        ModelCreator modelCreator = new ModelCreator(circuit, library);
+        TestExecuter testExecuter = new TestExecuter(modelCreator.createModel(false)).setUp(modelCreator);
+        testExecuter.check(0, 0);
+        testExecuter.checkC(1, 0);
+        testExecuter.checkC(0, 1);
+        testExecuter.checkC(1, 1);
+        testExecuter.checkC(0, 0);
+    }
+
+    public void testBuilder74xxFourBitSequentialCounterOutputs() throws Exception {
+        Variable q0 = new Variable("Q_0");
+        Variable q1 = new Variable("Q_1");
+        Variable q2 = new Variable("Q_2");
+        Variable q3 = new Variable("Q_3");
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setUse74xx(true)
+                .addSequential("Q_0", not(q0))
+                .addSequential("Q_1", or(and(not(q0), q1), and(q0, not(q1))))
+                .addSequential("Q_2", or(and(not(and(q0, q1)), q2), and(and(q0, q1), not(q2))))
+                .addSequential("Q_3", or(and(not(and(q0, q1, q2)), q3), and(and(q0, q1, q2), not(q3))))
+                .createCircuit();
+
+        assertEquals(4, circuit.getElements(element -> element.equalsDescription(Out.DESCRIPTION)).size());
+        assertWiresDoNotCrossIoElements(circuit);
+        ModelCreator modelCreator = new ModelCreator(circuit, library);
+        TestExecuter testExecuter = new TestExecuter(modelCreator.createModel(false)).setUp(modelCreator);
+        testExecuter.check(0, 0, 0, 0);
+        for (int state = 1; state < 16; state++) {
+            testExecuter.checkC(state & 1, (state >> 1) & 1, (state >> 2) & 1, (state >> 3) & 1);
+        }
+        testExecuter.checkC(0, 0, 0, 0);
+    }
+
+    public void testBuilder74xxEightVariableCombinatorialTemplate() throws Exception {
+        ArrayList<Variable> vars = new ArrayList<>();
+        for (int i = 0; i < 8; i++)
+            vars.add(new Variable("A_" + i));
+
+        ArrayList<Expression> minterms = new ArrayList<>();
+        for (int term = 0; term < 16; term++) {
+            int row = (term * 13) & 0xff;
+            ArrayList<Expression> literals = new ArrayList<>();
+            for (int bit = 0; bit < vars.size(); bit++) {
+                Expression variable = vars.get(bit);
+                literals.add(((row >> bit) & 1) == 1 ? variable : not(variable));
+            }
+            minterms.add(and(literals.toArray(new Expression[0])));
+        }
+
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder circuitBuilder = new CircuitBuilder(new ShapeFactory(library), vars)
+                .setUse74xx(true);
+        circuitBuilder.addCombinatorial("Y", or(minterms.toArray(new Expression[0])));
+        Circuit circuit = circuitBuilder.createCircuit();
+
+        assertTrue(circuit.getElements().size() > 30);
+        assertFalse(circuit.getWires().isEmpty());
+        assertWiresDoNotCrossIoElements(circuit);
+
+        ModelCreator modelCreator = new ModelCreator(circuit, library);
+        TestExecuter testExecuter = new TestExecuter(modelCreator.createModel(false)).setUp(modelCreator);
+        for (int row = 0; row < 256; row++) {
+            long[] values = new long[9];
+            for (int bit = 0; bit < vars.size(); bit++)
+                values[bit] = (row >> bit) & 1;
+            values[8] = row <= 15 * 13 && row % 13 == 0 ? 1 : 0;
+            testExecuter.check(values);
+        }
+    }
+
+    public void testBuilder74xxSequentialEightVariableTemplate() throws Exception {
+        ArrayList<Variable> vars = new ArrayList<>();
+        for (int i = 7; i >= 0; i--)
+            vars.add(new Variable("Q_" + i + "^n"));
+
+        TruthTable truthTable = new TruthTable(vars);
+        int rows = truthTable.getRows();
+        int bit = 7;
+        for (Variable variable : vars) {
+            BoolTableByteArray values = new BoolTableByteArray(rows);
+            for (int row = 0; row < rows; row++)
+                values.set(row, ((row + 1) >> bit) & 1);
+            truthTable.addResult(ModelAnalyser.addOne(variable.getIdentifier()), values);
+            bit--;
+        }
+
+        ExpressionListenerStore expressions = new ExpressionListenerStore(null);
+        new ExpressionCreator(truthTable).create(expressions);
+
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder circuitBuilder = new CircuitBuilder(new ShapeFactory(library), vars)
+                .setUse74xx(true);
+        new BuilderExpressionCreator(circuitBuilder).create(expressions);
+        Circuit circuit = circuitBuilder.createCircuit();
+
+        assertFalse(circuit.getElements().isEmpty());
+        assertWiresDoNotCrossIoElements(circuit);
+    }
+
+    private void assertWiresDoNotCrossIoElements(Circuit circuit) {
+        List<VisualElement> ioElements = circuit.getElements(element ->
+                element.equalsDescription(In.DESCRIPTION)
+                        || element.equalsDescription(Out.DESCRIPTION)
+                        || element.equalsDescription(FlipflopD.DESCRIPTION));
+        for (VisualElement element : ioElements) {
+            int minX = element.getMinMax(false).getMin().x;
+            int minY = element.getMinMax(false).getMin().y;
+            int maxX = element.getMinMax(false).getMax().x;
+            int maxY = element.getMinMax(false).getMax().y;
+            for (Pin pin : element.getPins()) {
+                if (Math.abs(pin.getPos().x - minX) <= 2)
+                    minX = pin.getPos().x;
+                if (Math.abs(pin.getPos().x - maxX) <= 2)
+                    maxX = pin.getPos().x;
+                if (Math.abs(pin.getPos().y - minY) <= 2)
+                    minY = pin.getPos().y;
+                if (Math.abs(pin.getPos().y - maxY) <= 2)
+                    maxY = pin.getPos().y;
+            }
+            for (Wire wire : circuit.getWires()) {
+                if (wire.p1.y == wire.p2.y) {
+                    int wireMinX = Math.min(wire.p1.x, wire.p2.x);
+                    int wireMaxX = Math.max(wire.p1.x, wire.p2.x);
+                    assertFalse("Wire (" + wire.p1.x + "," + wire.p1.y + ")-("
+                                    + wire.p2.x + "," + wire.p2.y + ") crosses "
+                                    + element.getElementName() + " bounds (" + minX + "," + minY
+                                    + ")-(" + maxX + "," + maxY + ")",
+                            wire.p1.y > minY && wire.p1.y < maxY
+                                    && wireMaxX > minX && wireMinX < maxX);
+                } else {
+                    int wireMinY = Math.min(wire.p1.y, wire.p2.y);
+                    int wireMaxY = Math.max(wire.p1.y, wire.p2.y);
+                    assertFalse("Wire (" + wire.p1.x + "," + wire.p1.y + ")-("
+                                    + wire.p2.x + "," + wire.p2.y + ") crosses "
+                                    + element.getElementName() + " bounds (" + minX + "," + minY
+                                    + ")-(" + maxX + "," + maxY + ")",
+                            wire.p1.x > minX && wire.p1.x < maxX
+                                    && wireMaxY > minY && wireMinY < maxY);
+                }
+            }
         }
     }
 
