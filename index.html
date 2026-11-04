@@ -92,25 +92,16 @@
       const loadingScreen = document.getElementById("loading-screen");
       const siteBase = new URL(".", document.baseURI);
       const cheerpjAppBase = `/app${siteBase.pathname}`;
+      const appDataBase = "/files/digital";
 
-      async function prepareAndRunApp() {
+      async function prepareApp() {
         statusText.innerText = "Loading Java Virtual Filesystem...";
         const lib = await cheerpjRunLibrary("");
         const Files = await lib.java.nio.file.Files;
         const Paths = await lib.java.nio.file.Paths;
 
-        statusText.innerText = "Checking application core...";
-        const jarSource = await Paths.get(`${cheerpjAppBase}Digital.jar`);
-        const jarTarget = await Paths.get("/files/digital/Digital.jar");
-
-        if (!(await Files.exists(jarTarget))) {
-          statusText.innerText = "Downloading application (first run takes longer)...";
-          await Files.createDirectories(await jarTarget.getParent());
-          await Files.copy(jarSource, jarTarget);
-        }
-
         statusText.innerText = "Fetching component list...";
-        const response = await fetch(new URL("manifest.json", siteBase));
+        const response = await fetch(new URL("manifest.json", siteBase), { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Failed to fetch library manifest (${response.status})`);
         }
@@ -119,34 +110,66 @@
         if (!manifest || !Array.isArray(manifest.files) || !Array.isArray(manifest.directories)) {
           throw new Error("Library manifest must contain files and directories arrays");
         }
-
-        for (const relativePath of manifest.directories) {
-          const target = await Paths.get(`/files/digital/lib/${relativePath}`);
-          await Files.createDirectories(target);
+        if (typeof manifest.sha !== "string" || !/^[a-f0-9]{40}$/i.test(manifest.sha)) {
+          throw new Error("Library manifest must contain a 40-character Git commit SHA");
         }
 
-        let copiedCount = 0;
-        for (const relativePath of manifest.files) {
-          const source = await Paths.get(`${cheerpjAppBase}lib/${relativePath}`);
-          const target = await Paths.get(`/files/digital/lib/${relativePath}`);
+        const jarTarget = await Paths.get(`${appDataBase}/Digital.jar`);
+        await Files.createDirectories(await Paths.get(appDataBase));
+        const cachedSha = localStorage.getItem("digitalAppSha");
+        if (cachedSha !== manifest.sha || !(await Files.exists(jarTarget))) {
+          const File = await lib.java.io.File;
+          const libraryDirectory = await new File(`${appDataBase}/lib`);
 
-          if (!(await Files.exists(target))) {
+          async function deleteTree(file) {
+            const children = await file.listFiles();
+            if (children !== null) {
+              for (let i = 0; i < children.length; i++) {
+                await deleteTree(children[i]);
+              }
+            }
+            if (!(await file.delete())) {
+              throw new Error(`Failed to remove cached library path: ${await file.getPath()}`);
+            }
+          }
+
+          if (await Files.exists(await Paths.get(`${appDataBase}/lib`))) {
+            await deleteTree(libraryDirectory);
+          }
+
+          const libraryRoot = await Paths.get(`${appDataBase}/lib`);
+          await Files.createDirectories(libraryRoot);
+          for (const relativePath of manifest.directories) {
+            await Files.createDirectories(await Paths.get(`${appDataBase}/lib/${relativePath}`));
+          }
+
+          statusText.innerText = "Downloading application...";
+          const jarSource = await Paths.get(`${cheerpjAppBase}Digital.jar`);
+          await Files.deleteIfExists(jarTarget);
+          await Files.copy(jarSource, jarTarget);
+
+          let copiedCount = 0;
+          for (const relativePath of manifest.files) {
             statusText.innerText = `Downloading library components (${++copiedCount}/${manifest.files.length})...`;
+            const source = await Paths.get(`${cheerpjAppBase}lib/${relativePath}`);
+            const target = await Paths.get(`${appDataBase}/lib/${relativePath}`);
             await Files.createDirectories(await target.getParent());
             await Files.copy(source, target);
           }
+          localStorage.setItem("digitalAppSha", manifest.sha);
         }
+        return `${appDataBase}/Digital.jar`;
       }
 
       (async function () {
         try {
           await cheerpjInit();
-          await prepareAndRunApp();
+          const jarPath = await prepareApp();
 
           statusText.innerText = "Starting Digital...";
           loadingScreen.style.display = "none";
           cheerpjCreateDisplay(-1, -1, document.getElementById("cheerpj-container"));
-          await cheerpjRunJar("/files/digital/Digital.jar");
+          await cheerpjRunJar(jarPath);
         } catch (error) {
           statusText.innerText = "Digital could not be started. See the browser console for details.";
           console.error("Digital initialization error:", error);

@@ -101,7 +101,7 @@ jobs:
           mv pages/Digital/Digital.jar pages/Digital.jar
           mv pages/Digital/lib pages/lib
           rmdir pages/Digital
-          node scripts/create-lib-manifest.js pages/lib pages/manifest.json
+          node scripts/create-lib-manifest.js pages/lib pages/manifest.json "$GITHUB_SHA"
           if [ -f index.html ]; then cp index.html pages/index.html; fi
           if [ -f CNAME ]; then cp CNAME pages/CNAME; fi
 

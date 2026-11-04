@@ -18,15 +18,16 @@ async function collectEntries(root, directory = '', result = { directories: [], 
 }
 
 async function main() {
-  const [libraryPath, manifestPath] = process.argv.slice(2);
-  if (!libraryPath || !manifestPath) {
-    throw new Error('Usage: node scripts/create-lib-manifest.js <lib-directory> <manifest-file>');
+  const [libraryPath, manifestPath, sha] = process.argv.slice(2);
+  if (!libraryPath || !manifestPath || !sha || !/^[a-f0-9]{40}$/i.test(sha)) {
+    throw new Error('Usage: node scripts/create-lib-manifest.js <lib-directory> <manifest-file> <git-sha>');
   }
 
   const library = path.resolve(libraryPath);
   const manifest = await collectEntries(library);
   manifest.directories.sort();
   manifest.files.sort();
+  manifest.sha = sha;
 
   const output = path.resolve(manifestPath);
   await fs.mkdir(path.dirname(output), { recursive: true });
