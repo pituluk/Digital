@@ -25,4 +25,17 @@ public class CheckForNewReleaseTest extends TestCase {
         assertFalse(CheckForNewRelease.isRunningVersionCurrentOrNewer("v1.1.0", "v1.2.0"));
     }
 
+    public void testGitHubCommitComparison() {
+        assertTrue(CheckForNewRelease.isRunningVersionCurrentOrNewer("release-10-g1234567", "v1.2.0", "ahead"));
+        assertTrue(CheckForNewRelease.isRunningVersionCurrentOrNewer("v1.2.0", "v1.2.0", "identical"));
+        assertFalse(CheckForNewRelease.isRunningVersionCurrentOrNewer("v1.1.0", "v1.2.0", "behind"));
+        assertFalse(CheckForNewRelease.isRunningVersionCurrentOrNewer("release-10-g1234567", "v1.2.0", "diverged"));
+    }
+
+    public void testExtractCommitFromGitDescribeRevision() {
+        assertEquals("1234567", CheckForNewRelease.getCommitFromRevision("release-10-g1234567"));
+        assertEquals("1234567", CheckForNewRelease.getCommitFromRevision("v1.2.0-2-g1234567-dirty"));
+        assertEquals("unknown", CheckForNewRelease.getCommitFromRevision("v1.2.0"));
+    }
+
 }

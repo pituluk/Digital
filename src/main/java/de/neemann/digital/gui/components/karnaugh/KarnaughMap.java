@@ -132,7 +132,9 @@ public class KarnaughMap implements Iterable<KarnaughMap.Cover> {
                     addCover(and);
                 else
                     throw new KarnaughException(Lang.get("err_invalidExpression"));
-        } else if (!(expr instanceof Constant))
+        } else if (expr == Constant.ONE)
+            addCover(new ArrayList<>());
+        else if (expr != Constant.ZERO)
             throw new KarnaughException(Lang.get("err_invalidExpression"));
     }
 

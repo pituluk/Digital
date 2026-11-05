@@ -49,6 +49,13 @@ public class KarnaughMapTest extends TestCase {
             assertEquals(1, co.getSize());
     }
 
+    public void testConstantOneCoversEntireMap() throws KarnaughException {
+        KarnaughMap map = new KarnaughMap(Variable.vars(2), Constant.ONE);
+
+        assertEquals(1, map.size());
+        assertEquals(4, map.iterator().next().getSize());
+    }
+
     public void testSimple3() throws IOException, ParseException, KarnaughException {
         Expression exp = new Parser("(A ¬C) ∨ (¬A ¬B) ∨ (B C)").parse().get(0);
         KarnaughMap c = new KarnaughMap(Variable.vars(3), exp);

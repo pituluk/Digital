@@ -1389,7 +1389,7 @@
         You can change this setting with the [P] key.
     </string>
     <string name="key_ExpressionFormat">Format</string>
-    <string name="key_ExpressionFormat_tt">Screen format of expressions.</string>
+    <string name="key_ExpressionFormat_tt">Screen format of expressions. Select the short format to use !, +, and * instead of math symbols.</string>
     <string name="key_relayNormallyClosed">Relay is normally closed.</string><!-- Relay -->
     <string name="key_relayNormallyClosed_tt">If set the relay is closed if the input is low.</string>
     <string name="key_poles">Pole count</string><!-- Relay -->
@@ -2073,7 +2073,12 @@
     <string name="msg_remoteUnknownCommand">Command {0} unknown!</string>
     <string name="msg_enterAnExpression">Enter an expression:</string>
     <string name="msg_showSimplifiedTruthTable">Show simplified truth table</string>
-    <string name="msg_truthTableExpressionNote">The expression shown below is simplified independently of this table.</string>
+    <string name="msg_simplifyExpression">Simplify expression</string>
+    <string name="msg_simplifyExpression_tt">Simplify the expression before generating the circuit.</string>
+    <string name="msg_unoptimizedExpression">Unoptimized expression:</string>
+    <string name="msg_optimizedExpression">Optimized expression:</string>
+    <string name="msg_karnaughGroupOnes">Group 1s</string>
+    <string name="msg_karnaughGroupZeros">Group 0s</string>
     <string name="msg_runningTestError">Error running the tests:</string>
     <string name="msg_testResult">Test result</string>
     <string name="msg_test_N_Passed">{0} passed</string>

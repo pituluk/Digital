@@ -33,6 +33,7 @@ public final class InfoDialog implements Iterable<InfoDialog.Manifest> {
     private static InfoDialog instance;
     private final ArrayList<Manifest> infos;
     private String revision = UNKNOWN;
+    private String commitId = UNKNOWN;
 
     /**
      * @return the singleton instance
@@ -55,6 +56,8 @@ public final class InfoDialog implements Iterable<InfoDialog.Manifest> {
             if (m.get(Manifest.REVISION) != null) {
                 infos.add(m);
                 revision = m.get(Manifest.REVISION);
+                if (m.get(Manifest.COMMIT_ID) != null)
+                    commitId = m.get(Manifest.COMMIT_ID);
             }
         }
     }
@@ -176,10 +179,18 @@ public final class InfoDialog implements Iterable<InfoDialog.Manifest> {
     }
 
     /**
+     * @return the build commit id
+     */
+    public String getCommitId() {
+        return commitId;
+    }
+
+    /**
      * A simple Manifest parser
      */
     public static final class Manifest {
         private static final String REVISION = "Build-SCM-Revision";
+        private static final String COMMIT_ID = "Build-Commit-ID";
         private static final String TIME = "Build-Time";
 
         private final HashMap<String, String> manifest;
@@ -228,6 +239,8 @@ public final class InfoDialog implements Iterable<InfoDialog.Manifest> {
             sb.append(path.substring(p + 1)).append("<br/>");
             sb.append("Build Git-Revision").append(": ");
             sb.append(get(REVISION)).append("<br/>");
+            if (get(COMMIT_ID) != null)
+                sb.append("Build Commit-ID").append(": ").append(get(COMMIT_ID)).append("<br/>");
             sb.append("Build Time").append(": ");
             sb.append(get(TIME)).append("<br/></p>");
         }

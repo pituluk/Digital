@@ -176,7 +176,7 @@ public class KarnaughMapComponent extends JComponent {
             // draw the covers
             int color = 0;
             for (KarnaughMap.Cover c : kv) {
-                gr.setColor(COVER_COLORS[color++]);
+                gr.setColor(COVER_COLORS[color++ % COVER_COLORS.length]);
                 KarnaughMap.Pos p = c.getPos();
                 int frame = (c.getInset() + 1) * STROKE_WIDTH;
                 int edgesRadius = cellSize - frame * 2;
@@ -188,7 +188,7 @@ public class KarnaughMapComponent extends JComponent {
                         gr.drawRoundRect(4 * cellSize + frame, frame, 2 * cellSize - frame * 2, 2 * cellSize - frame * 2, edgesRadius, edgesRadius);
                         gr.drawRoundRect(frame, 4 * cellSize + frame, 2 * cellSize - frame * 2, 2 * cellSize - frame * 2, edgesRadius, edgesRadius);
                         gr.drawRoundRect(4 * cellSize + frame, 4 * cellSize + frame, 2 * cellSize - frame * 2, 2 * cellSize - frame * 2, edgesRadius, edgesRadius);
-                    } else { // draw the two parts of the cover
+                    } else {
                         int xofs = 0;
                         int yOfs = 0;
                         if (c.isVerticalDivided())
@@ -202,7 +202,6 @@ public class KarnaughMapComponent extends JComponent {
                         gr.drawRoundRect((p.getCol() + 1) * cellSize + frame - xofs, (p.getRow() + 1) * cellSize + frame - yOfs,
                                 p.getWidth() * cellSize - frame * 2, p.getHeight() * cellSize - frame * 2,
                                 edgesRadius, edgesRadius);
-
                     }
                     gr.setClip(clip.x, clip.y, clip.width, clip.height);
                 } else

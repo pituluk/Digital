@@ -2086,7 +2086,12 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="msg_restartNeeded">Die Änderung der Einstellung erfordert einen Neustart!</string>
     <string name="msg_enterAnExpression">Geben Sie einen Ausdruck ein:</string>
     <string name="msg_showSimplifiedTruthTable">Vereinfachte Wahrheitstabelle anzeigen</string>
-    <string name="msg_truthTableExpressionNote">Der unten angezeigte Ausdruck wird unabhängig von dieser Tabelle vereinfacht.</string>
+    <string name="msg_simplifyExpression">Ausdruck vereinfachen</string>
+    <string name="msg_simplifyExpression_tt">Den Ausdruck vor dem Erstellen der Schaltung vereinfachen.</string>
+    <string name="msg_unoptimizedExpression">Nicht optimierter Ausdruck:</string>
+    <string name="msg_optimizedExpression">Optimierter Ausdruck:</string>
+    <string name="msg_karnaughGroupOnes">Einsen gruppieren</string>
+    <string name="msg_karnaughGroupZeros">Nullen gruppieren</string>
     <string name="msg_runningTestError">Fehler bei der Ausführung der Tests:</string>
     <string name="msg_testResult">Testergebnis</string>
     <string name="msg_test_N_Passed">{0}: ok</string>

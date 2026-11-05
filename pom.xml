@@ -139,6 +139,7 @@
                         </manifest>
                         <manifestEntries>
                             <Build-SCM-Revision>${git.commit.id.describe}</Build-SCM-Revision>
+                            <Build-Commit-ID>${git.commit.id}</Build-Commit-ID>
                             <Build-Time>${buildTimestamp}</Build-Time>
                             <SplashScreen-Image>icons/splash.png</SplashScreen-Image>
                         </manifestEntries>
@@ -204,6 +205,7 @@
                         </manifest>
                         <manifestEntries>
                             <Build-SCM-Revision>${git.commit.id.describe}</Build-SCM-Revision>
+                            <Build-Commit-ID>${git.commit.id}</Build-Commit-ID>
                             <Build-Time>${buildTimestamp}</Build-Time>
                             <SplashScreen-Image>icons/splash.png</SplashScreen-Image>
                         </manifestEntries>

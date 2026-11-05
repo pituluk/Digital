@@ -12,7 +12,9 @@ import de.neemann.digital.analyse.TruthTableTableModel;
 import de.neemann.digital.analyse.expression.Expression;
 import de.neemann.digital.analyse.expression.ExpressionException;
 import de.neemann.digital.analyse.expression.NamedExpression;
+import de.neemann.digital.analyse.expression.Not;
 import de.neemann.digital.analyse.expression.Variable;
+import de.neemann.digital.analyse.expression.format.FormatToExpression;
 import de.neemann.digital.analyse.expression.format.FormatterException;
 import de.neemann.digital.analyse.expression.modify.*;
 import de.neemann.digital.analyse.format.TruthTableFormatter;
@@ -53,6 +55,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -104,7 +108,6 @@ public class TableDialog extends JDialog {
         }
     }
 
-    private final ExpressionComponent statusBar;
     private final JTable table;
     private final JTabbedPane tabs;
     private JCheckBox showSimplifiedTruthTable;
@@ -119,6 +122,17 @@ public class TableDialog extends JDialog {
     private final KarnaughMapDialog kvMap;
     private final Mouse mouse = Mouse.getMouse();
     private final UndoManager<TruthTable> undoManager;
+    private JTextArea unoptimizedExpressionText;
+    private JTextArea optimizedExpressionText;
+    private JTextArea sourceExpressionText;
+    private JLabel expressionInputStatus;
+    private JRadioButton implicantsExpression;
+    private JRadioButton implicentsExpression;
+    private Timer expressionUpdateTimer;
+    private JPanel expressionResultsPanel;
+    private JPanel expressionTypePanel;
+    private JPanel unoptimizedExpressionRow;
+    private JPanel optimizedExpressionRow;
     private JCheckBoxMenuItem createJK;
     private JCheckBoxMenuItem useSwitchesAndLeds;
     private File filename;
@@ -128,6 +142,9 @@ public class TableDialog extends JDialog {
     private TruthTable originalExpressionTable;
     private TruthTable simplifiedExpressionTable;
     private boolean showingSimplifiedExpressionTable;
+    private boolean preservingExpressionTableViews;
+    private int calculationGeneration;
+    private int expressionPolarityGeneration;
 
     /**
      * Creates a new instance
@@ -150,9 +167,7 @@ public class TableDialog extends JDialog {
 
         kvMap = new KarnaughMapDialog(this, model::incValue);
 
-        statusBar = new ExpressionComponent();
         font = Screen.getInstance().getFont(1.66f);
-        statusBar.setFont(font);
         table = new JTable(model);
         JComboBox<String> comboBox = new JComboBox<>(TruthTableTableModel.STATENAMES);
         table.setDefaultEditor(Integer.class, new DefaultCellEditor(comboBox));
@@ -322,10 +337,80 @@ public class TableDialog extends JDialog {
         showSimplifiedTruthTable.addActionListener(event -> showExpressionTable(showSimplifiedTruthTable.isSelected()));
         tablePanel.add(showSimplifiedTruthTable, BorderLayout.NORTH);
         tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
-        tablePanel.add(statusBar, BorderLayout.SOUTH);
+        JPanel resultsPanel = new JPanel();
+        resultsPanel.setLayout(new BoxLayout(resultsPanel, BoxLayout.Y_AXIS));
+        resultsPanel.add(createExpressionInputPanel());
+        resultsPanel.add(createExpressionResultsPanel());
+        tablePanel.add(resultsPanel, BorderLayout.SOUTH);
         tabbedPane.addTab(Lang.get("win_table"), tablePanel);
-        tabbedPane.addTab(Lang.get("expression"), createExpressionTab());
         return tabbedPane;
+    }
+
+    private JPanel createExpressionInputPanel() {
+        JPanel panel = new JPanel(new BorderLayout(4, 2));
+        panel.setBorder(BorderFactory.createTitledBorder(Lang.get("msg_enterAnExpression")));
+        sourceExpressionText = new JTextArea(3, 40);
+        sourceExpressionText.setLineWrap(true);
+        sourceExpressionText.setWrapStyleWord(true);
+        panel.add(new JScrollPane(sourceExpressionText), BorderLayout.CENTER);
+        expressionInputStatus = new JLabel(" ");
+        panel.add(expressionInputStatus, BorderLayout.SOUTH);
+        expressionUpdateTimer = new Timer(250, event -> updateTableFromExpression());
+        expressionUpdateTimer.setRepeats(false);
+        sourceExpressionText.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                expressionUpdateTimer.restart();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                expressionUpdateTimer.restart();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                expressionUpdateTimer.restart();
+            }
+        });
+        return panel;
+    }
+
+    private JPanel createExpressionResultsPanel() {
+        expressionResultsPanel = new JPanel(new GridLayout(0, 1, 2, 2));
+        implicantsExpression = new JRadioButton(Lang.get("msg_karnaughGroupOnes"), true);
+        implicentsExpression = new JRadioButton(Lang.get("msg_karnaughGroupZeros"));
+        ButtonGroup expressionType = new ButtonGroup();
+        expressionType.add(implicantsExpression);
+        expressionType.add(implicentsExpression);
+        expressionTypePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        expressionTypePanel.add(implicantsExpression);
+        expressionTypePanel.add(implicentsExpression);
+        expressionResultsPanel.add(expressionTypePanel);
+        implicantsExpression.addActionListener(event -> updateExpressionPolarity());
+        implicentsExpression.addActionListener(event -> updateExpressionPolarity());
+        unoptimizedExpressionText = createExpressionTextArea();
+        optimizedExpressionText = createExpressionTextArea();
+        unoptimizedExpressionRow = createExpressionRow(Lang.get("msg_unoptimizedExpression"), unoptimizedExpressionText);
+        optimizedExpressionRow = createExpressionRow(Lang.get("msg_optimizedExpression"), optimizedExpressionText);
+        expressionResultsPanel.add(unoptimizedExpressionRow);
+        expressionResultsPanel.add(optimizedExpressionRow);
+        return expressionResultsPanel;
+    }
+
+    private JTextArea createExpressionTextArea() {
+        JTextArea textArea = new JTextArea(2, 40);
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        return textArea;
+    }
+
+    private JPanel createExpressionRow(String label, JTextArea textArea) {
+        JPanel panel = new JPanel(new BorderLayout(6, 0));
+        panel.add(new JLabel(label), BorderLayout.WEST);
+        panel.add(new JScrollPane(textArea), BorderLayout.CENTER);
+        return panel;
     }
 
     private void setupTableInput() {
@@ -400,7 +485,6 @@ public class TableDialog extends JDialog {
      */
     public void tableChanged() {
         karnaughMenuAction.setEnabled(undoManager.getActual().getVars().size() <= 4);
-        calculateExpressions();
         model.fireTableChanged();
     }
 
@@ -670,39 +754,25 @@ public class TableDialog extends JDialog {
         return createMenu;
     }
 
-    private JPanel createExpressionTab() {
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-
-        JLabel explanation = new JLabel(Lang.get("msg_truthTableExpressionNote"));
-        JTextArea expression = new JTextArea("(C ∨ B) ∧ (A ∨ C) ∧ (B ∨ !C) * (C + !A)", 5, 40);
-        expression.setLineWrap(true);
-        expression.setWrapStyleWord(true);
-        panel.add(explanation, BorderLayout.NORTH);
-        panel.add(new JScrollPane(expression), BorderLayout.CENTER);
-
-        JButton create = new JButton(Lang.get("btn_create"));
-        create.addActionListener(event -> createTableFromExpression(expression.getText()));
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttons.add(create);
-        panel.add(buttons, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    private void createTableFromExpression(String source) {
+    private void updateTableFromExpression() {
+        String source = sourceExpressionText.getText();
+        if (source.trim().isEmpty()) {
+            expressionInputStatus.setText(Lang.get("msg_enterAnExpression"));
+            return;
+        }
         try {
             ArrayList<Expression> expressions = new de.neemann.digital.analyse.parser.Parser(source).parse();
-            originalExpressionTable = ExpressionToTruthTable.create(expressions, false);
-            simplifiedExpressionTable = ExpressionToTruthTable.create(expressions, true);
+            TruthTable originalTable = ExpressionToTruthTable.create(expressions, false);
+            TruthTable simplifiedTable = ExpressionToTruthTable.create(expressions, true);
+            setExpressionTableViews(originalTable, simplifiedTable);
             showingSimplifiedExpressionTable = false;
             showSimplifiedTruthTable.setSelected(false);
-            showSimplifiedTruthTable.setVisible(true);
-            undoManager.setInitial(originalExpressionTable.createDeepCopy());
+            undoManager.setInitial(originalTable.createDeepCopy());
             model.setOriginal(null);
-            tableChanged();
-            tabs.setSelectedIndex(0);
+            tableChangedPreservingExpressionViews();
+            expressionInputStatus.setText(" ");
         } catch (IOException | de.neemann.digital.analyse.parser.ParseException | ExpressionException e) {
-            new ErrorMessage().addCause(e).show(TableDialog.this);
+            expressionInputStatus.setText(e.getMessage());
         }
     }
 
@@ -712,6 +782,37 @@ public class TableDialog extends JDialog {
         showingSimplifiedExpressionTable = false;
         showSimplifiedTruthTable.setSelected(false);
         showSimplifiedTruthTable.setVisible(false);
+    }
+
+    private void setExpressionTableViews(TruthTable originalTable, TruthTable simplifiedTable) {
+        originalExpressionTable = originalTable.createDeepCopy();
+        simplifiedExpressionTable = simplifiedTable.createDeepCopy();
+        showingSimplifiedExpressionTable = false;
+        boolean tablesDiffer = !truthTablesEqual(originalExpressionTable, simplifiedExpressionTable);
+        showSimplifiedTruthTable.setSelected(false);
+        showSimplifiedTruthTable.setVisible(tablesDiffer);
+    }
+
+    private boolean truthTablesEqual(TruthTable first, TruthTable second) {
+        if (first.getVars().size() != second.getVars().size()
+                || first.getResultCount() != second.getResultCount()
+                || first.getRows() != second.getRows())
+            return false;
+        for (int i = 0; i < first.getVars().size(); i++) {
+            if (!first.getVars().get(i).getIdentifier().equals(second.getVars().get(i).getIdentifier()))
+                return false;
+        }
+        for (int i = 0; i < first.getResultCount(); i++) {
+            if (!first.getResultName(i).equals(second.getResultName(i)))
+                return false;
+        }
+        for (int row = 0; row < first.getRows(); row++) {
+            for (int column = 0; column < first.getCols(); column++) {
+                if (first.getValue(row, column) != second.getValue(row, column))
+                    return false;
+            }
+        }
+        return true;
     }
 
     private void showExpressionTable(boolean showSimplified) {
@@ -728,7 +829,16 @@ public class TableDialog extends JDialog {
         TruthTable selected = showSimplified ? simplifiedExpressionTable : originalExpressionTable;
         undoManager.setInitial(selected.createDeepCopy());
         model.setOriginal(null);
-        tableChanged();
+        tableChangedPreservingExpressionViews();
+    }
+
+    private void tableChangedPreservingExpressionViews() {
+        preservingExpressionTableViews = true;
+        try {
+            tableChanged();
+        } finally {
+            preservingExpressionTableViews = false;
+        }
     }
 
     private void register(JMenu hardware, final HardwareDescriptionGenerator generator) {
@@ -845,19 +955,30 @@ public class TableDialog extends JDialog {
     private class CalculationTableModelListener implements TableModelListener {
         @Override
         public void tableChanged(TableModelEvent tableModelEvent) {
+            if (!preservingExpressionTableViews)
+                clearExpressionTableViews();
             calculateExpressions();
         }
     }
 
     private void calculateExpressions() {
+        int generation = ++calculationGeneration;
+        boolean preserveExpressionTableViews = preservingExpressionTableViews;
         try {
             LOGGER.info("start optimization");
-            ExpressionListener expressionListener = new OutputExpressionListener();
+            ExpressionListener expressionListener = new OutputExpressionListener(generation);
 
             if (createJK.isSelected())
                 expressionListener = new ExpressionListenerJK(expressionListener);
 
             final TruthTable table = undoManager.getActual();
+            lastGeneratedExpressions = null;
+            if (implicentsExpression.isSelected())
+                setUnoptimizedExpressions(table, true);
+            else
+                setUnoptimizedExpressions(table, false);
+            optimizedExpressionText.setText("");
+            showExpressionRowsDiffer(false);
             if (table.getVars().size() >= 8) {
                 ProgressDialog progress = new ProgressDialog(this);
 
@@ -869,6 +990,8 @@ public class TableDialog extends JDialog {
                     } catch (ExpressionException | FormatterException | AnalyseException e) {
                         SwingUtilities.invokeLater(() -> {
                             progress.dispose();
+                            if (generation != calculationGeneration)
+                                return;
                             lastGeneratedExpressions = null;
                             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
                         });
@@ -876,12 +999,20 @@ public class TableDialog extends JDialog {
                     }
 
                     SwingUtilities.invokeLater(() -> {
+                        if (generation != calculationGeneration) {
+                            progress.dispose();
+                            return;
+                        }
                         try {
                             lastGeneratedExpressions = new ExpressionListenerStore(finalExpressionListener);
                             storage.replayTo(lastGeneratedExpressions);
                             lastGeneratedExpressions.close();
+                            if (!preserveExpressionTableViews)
+                                updateExpressionTableViews(table, lastGeneratedExpressions.getResults());
                             kvMap.setResult(table, lastGeneratedExpressions.getResults());
-                        } catch (FormatterException | ExpressionException e) {
+                            if (implicentsExpression.isSelected())
+                                calculateImplicentExpressions(table, generation);
+                        } catch (IOException | FormatterException | ExpressionException e) {
                             lastGeneratedExpressions = null;
                             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
                         }
@@ -891,14 +1022,185 @@ public class TableDialog extends JDialog {
             } else {
                 lastGeneratedExpressions = new ExpressionListenerStore(expressionListener);
                 new ExpressionCreator(table).create(lastGeneratedExpressions);
+                if (!preserveExpressionTableViews)
+                    updateExpressionTableViews(table, lastGeneratedExpressions.getResults());
                 kvMap.setResult(table, lastGeneratedExpressions.getResults());
+                if (implicentsExpression.isSelected())
+                    calculateImplicentExpressions(table, generation);
             }
 
             LOGGER.info("optimization finished");
-        } catch (ExpressionException | FormatterException | AnalyseException e1) {
+        } catch (IOException | ExpressionException | FormatterException | AnalyseException e1) {
             lastGeneratedExpressions = null;
             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e1).show(this);
         }
+    }
+
+    private void setUnoptimizedExpressions(TruthTable table, boolean useZeros) {
+        StringBuilder expressions = new StringBuilder();
+        TruthTable expressionTable = useZeros ? createInvertedTable(table) : table;
+        for (int i = 0; i < table.getResultCount(); i++) {
+            if (expressions.length() > 0)
+                expressions.append('\n');
+            Expression expression = ExpressionCreator.createUnoptimizedExpression(table.getVars(), expressionTable.getResult(i));
+            if (useZeros)
+                expression = Not.not(expression);
+            expressions.append(FormatToExpression.defaultFormat(new NamedExpression(table.getResultName(i), expression)));
+        }
+        unoptimizedExpressionText.setText(expressions.toString());
+    }
+
+    private TruthTable createInvertedTable(TruthTable source) {
+        TruthTable inverted = new TruthTable(new ArrayList<>(source.getVars()));
+        for (int result = 0; result < source.getResultCount(); result++)
+            inverted.addResult(source.getResultName(result));
+        for (int row = 0; row < source.getRows(); row++) {
+            for (int result = 0; result < source.getResultCount(); result++) {
+                inverted.setValue(row, source.getVars().size() + result,
+                        source.getResult(result).get(row).invert().asInt());
+            }
+        }
+        return inverted;
+    }
+
+    private void updateExpressionPolarity() {
+        int generation = ++expressionPolarityGeneration;
+        TruthTable currentTable = undoManager.getActual();
+        boolean useZeros = implicentsExpression.isSelected();
+        setUnoptimizedExpressions(currentTable, useZeros);
+        optimizedExpressionText.setText("");
+        showExpressionRowsDiffer(false);
+        if (useZeros) {
+            calculateImplicentExpressions(currentTable, calculationGeneration, generation);
+        } else if (lastGeneratedExpressions != null) {
+            showExpressionResults(lastGeneratedExpressions.getResults());
+        }
+    }
+
+    private void calculateImplicentExpressions(TruthTable sourceTable, int calculation) {
+        calculateImplicentExpressions(sourceTable, calculation, ++expressionPolarityGeneration);
+    }
+
+    private void calculateImplicentExpressions(TruthTable sourceTable, int calculation, int polarity) {
+        TruthTable inverted = createInvertedTable(sourceTable);
+        Thread worker = new Thread(() -> {
+            try {
+                ExpressionListenerStore storage = new ExpressionListenerStore(null);
+                new ExpressionCreator(inverted).create(storage);
+                SwingUtilities.invokeLater(() -> {
+                    if (calculation != calculationGeneration
+                            || polarity != expressionPolarityGeneration
+                            || !implicentsExpression.isSelected())
+                        return;
+                    ArrayList<Expression> expressions = new ArrayList<>();
+                    String currentResultName = null;
+                    for (ExpressionListenerStore.Result result : storage.getResults()) {
+                        if (getResultIndex(sourceTable, result.getName()) >= 0)
+                            currentResultName = getTableResultName(sourceTable, result.getName());
+                        else if (!result.getName().isEmpty())
+                            currentResultName = null;
+                        if (currentResultName != null) {
+                            expressions.add(new NamedExpression(currentResultName,
+                                    Not.not(result.getExpression().copy())));
+                        }
+                    }
+                    showExpressionResults(expressions);
+                });
+            } catch (ExpressionException | FormatterException | AnalyseException e) {
+                SwingUtilities.invokeLater(() -> {
+                    if (calculation == calculationGeneration && polarity == expressionPolarityGeneration)
+                        new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
+                });
+            }
+        }, "Implicent expression calculation");
+        worker.start();
+    }
+
+    private int getResultIndex(TruthTable truthTable, String name) {
+        for (int i = 0; i < truthTable.getResultCount(); i++) {
+            if (normalizeGeneratedName(truthTable.getResultName(i)).equals(normalizeGeneratedName(name)))
+                return i;
+        }
+        return -1;
+    }
+
+    private String getTableResultName(TruthTable truthTable, String name) {
+        int index = getResultIndex(truthTable, name);
+        return index < 0 ? name : truthTable.getResultName(index);
+    }
+
+    private void showExpressionResults(List<ExpressionListenerStore.Result> results) {
+        ArrayList<Expression> expressions = new ArrayList<>();
+        for (ExpressionListenerStore.Result result : results)
+            expressions.add(new NamedExpression(result.getName(), result.getExpression().copy()));
+        showExpressionResults(expressions);
+    }
+
+    private void showExpressionResults(ArrayList<Expression> expressions) {
+        StringBuilder formattedExpressions = new StringBuilder();
+        for (Expression expression : expressions) {
+            if (formattedExpressions.length() > 0)
+                formattedExpressions.append('\n');
+            formattedExpressions.append(FormatToExpression.defaultFormat(expression));
+        }
+        updateExpressionResults(formattedExpressions.toString());
+        switch (expressions.size()) {
+            case 0:
+            case 1:
+                allSolutionsDialog.setNeeded(false, getBounds());
+                break;
+            default:
+                allSolutionsDialog.setExpressions(expressions);
+                allSolutionsDialog.setNeeded(true, getBounds());
+                toFront();
+        }
+    }
+
+    private void showExpressionRowsDiffer(boolean expressionsDiffer) {
+        expressionResultsPanel.removeAll();
+        expressionResultsPanel.add(expressionTypePanel);
+        if (expressionsDiffer)
+            expressionResultsPanel.add(unoptimizedExpressionRow);
+        expressionResultsPanel.add(optimizedExpressionRow);
+        expressionResultsPanel.revalidate();
+        expressionResultsPanel.repaint();
+    }
+
+    private void updateExpressionResults(String optimizedExpressions) {
+        optimizedExpressionText.setText(optimizedExpressions);
+        boolean expressionsDiffer = !unoptimizedExpressionText.getText().equals(optimizedExpressions);
+        showExpressionRowsDiffer(expressionsDiffer);
+    }
+
+    private void updateExpressionTableViews(TruthTable table, List<ExpressionListenerStore.Result> results)
+            throws IOException, ExpressionException {
+        if (table.getResultCount() == 0) {
+            clearExpressionTableViews();
+            return;
+        }
+        ArrayList<Expression> expressions = new ArrayList<>();
+        for (int i = 0; i < table.getResultCount(); i++) {
+            String resultName = table.getResultName(i);
+            ExpressionListenerStore.Result matchingResult = null;
+            for (ExpressionListenerStore.Result result : results) {
+                if (normalizeGeneratedName(resultName).equals(normalizeGeneratedName(result.getName()))) {
+                    matchingResult = result;
+                    break;
+                }
+            }
+            if (matchingResult == null) {
+                clearExpressionTableViews();
+                return;
+            }
+            expressions.add(new NamedExpression(resultName, matchingResult.getExpression()));
+        }
+
+        TruthTable simplifiedTable = ExpressionToTruthTable.create(expressions, true);
+        setExpressionTableViews(table, simplifiedTable);
+    }
+
+    private String normalizeGeneratedName(String name) {
+        return name.replace("^{n+1}", "^n+1");
     }
 
     /**
@@ -1052,8 +1354,10 @@ public class TableDialog extends JDialog {
 
     private final class OutputExpressionListener implements ExpressionListener {
         private final ArrayList<Expression> expressions;
+        private final int generation;
 
-        private OutputExpressionListener() {
+        private OutputExpressionListener(int generation) {
+            this.generation = generation;
             expressions = new ArrayList<>();
         }
 
@@ -1061,28 +1365,15 @@ public class TableDialog extends JDialog {
         public void resultFound(String name, Expression expression) {
             if (name.endsWith("^n+1"))
                 name = name.substring(0, name.length() - 4) + "^{n+1}";
-            expressions.add(new NamedExpression(name, expression));
+            NamedExpression namedExpression = new NamedExpression(name, expression);
+            expressions.add(namedExpression);
         }
 
         @Override
         public void close() {
             SwingUtilities.invokeLater(() -> {
-                switch (expressions.size()) {
-                    case 0:
-                        statusBar.setVisible(false);
-                        allSolutionsDialog.setNeeded(false, TableDialog.this.getBounds());
-                        break;
-                    case 1:
-                        statusBar.setVisible(true);
-                        statusBar.setExpression(expressions.get(0));
-                        allSolutionsDialog.setNeeded(false, TableDialog.this.getBounds());
-                        break;
-                    default:
-                        statusBar.setVisible(false);
-                        allSolutionsDialog.setExpressions(expressions);
-                        allSolutionsDialog.setNeeded(true, TableDialog.this.getBounds());
-                        toFront();
-                }
+                if (generation == calculationGeneration && implicantsExpression.isSelected())
+                    showExpressionResults(expressions);
             });
         }
     }

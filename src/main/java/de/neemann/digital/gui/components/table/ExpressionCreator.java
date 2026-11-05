@@ -6,10 +6,15 @@
 package de.neemann.digital.gui.components.table;
 
 import de.neemann.digital.analyse.*;
+import de.neemann.digital.analyse.expression.Constant;
+import de.neemann.digital.analyse.expression.Expression;
 import de.neemann.digital.analyse.expression.ExpressionException;
+import de.neemann.digital.analyse.expression.Not;
+import de.neemann.digital.analyse.expression.Operation;
 import de.neemann.digital.analyse.expression.Variable;
 import de.neemann.digital.analyse.expression.format.FormatterException;
 import de.neemann.digital.analyse.quinemc.BoolTable;
+import de.neemann.digital.analyse.quinemc.ThreeStateValue;
 import de.neemann.digital.analyse.quinemc.TableReducer;
 import de.neemann.digital.gui.Main;
 import de.neemann.digital.lang.Lang;
@@ -42,6 +47,34 @@ public class ExpressionCreator {
      */
     public ExpressionCreator(TruthTable theTable) {
         this.theTable = theTable;
+    }
+
+    /**
+     * Creates the canonical sum-of-products expression for a result table.
+     *
+     * @param vars the variables used
+     * @param boolTable the result values
+     * @return the expression
+     */
+    public static Expression createUnoptimizedExpression(List<Variable> vars, BoolTable boolTable) {
+        ArrayList<Expression> minTerms = new ArrayList<>();
+        for (int row = 0; row < boolTable.size(); row++) {
+            if (boolTable.get(row) == ThreeStateValue.one) {
+                ArrayList<Expression> literals = new ArrayList<>();
+                for (int i = 0; i < vars.size(); i++) {
+                    int mask = 1 << (vars.size() - i - 1);
+                    Expression variable = new Variable(vars.get(i).getIdentifier());
+                    literals.add((row & mask) == 0 ? Not.not(variable) : variable);
+                }
+                if (literals.isEmpty())
+                    minTerms.add(Constant.ONE);
+                else
+                    minTerms.add(Operation.andNoMerge(literals.toArray(new Expression[0])));
+            }
+        }
+        if (minTerms.isEmpty())
+            return Constant.ZERO;
+        return Operation.orNoMerge(minTerms.toArray(new Expression[0]));
     }
 
     /**

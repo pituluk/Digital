@@ -13,6 +13,7 @@ import de.neemann.digital.analyse.expression.modify.NAnd;
 import de.neemann.digital.analyse.expression.modify.NInputs;
 import de.neemann.digital.analyse.expression.modify.NOr;
 import de.neemann.digital.analyse.parser.Parser;
+import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
 import de.neemann.digital.builder.circuit.CircuitBuilder;
 import de.neemann.digital.draw.elements.Circuit;
 import de.neemann.digital.draw.library.ElementLibrary;
@@ -87,6 +88,9 @@ public class ExpressionDialog extends JDialog {
         JCheckBox useSwitchesAndLeds = new JCheckBox(Lang.get("msg_builder_useSwitchesAndLeds"));
         useSwitchesAndLeds.setToolTipText(Lang.get("msg_builder_useSwitchesAndLeds_tt"));
         options.add(useSwitchesAndLeds);
+        JCheckBox simplify = new JCheckBox(Lang.get("msg_simplifyExpression"));
+        simplify.setToolTipText(Lang.get("msg_simplifyExpression_tt"));
+        options.add(simplify);
 
         JComboBox<CircuitVariant> variantPicker = createVariantPicker();
         options.add(new JLabel(Lang.get("menu_table_createCircuitMore") + ":"));
@@ -131,6 +135,8 @@ public class ExpressionDialog extends JDialog {
                             name = ((NamedExpression) item).getName();
                             exp = ((NamedExpression) item).getExpression();
                         }
+                        if (simplify.isSelected())
+                            exp = QuineMcCluskey.simplify(exp);
                         Expression modified = ExpressionModifier.modifyExpression(exp, variant.modifiers);
                         circuitBuilder.addCombinatorial(name, modified);
                     } else {
@@ -141,6 +147,8 @@ public class ExpressionDialog extends JDialog {
                                 name = ((NamedExpression) item).getName();
                                 exp = ((NamedExpression) item).getExpression();
                             }
+                            if (simplify.isSelected())
+                                exp = QuineMcCluskey.simplify(exp);
                             Expression modified = ExpressionModifier.modifyExpression(exp, variant.modifiers);
                             circuitBuilder.addCombinatorial(name, modified);
                         }

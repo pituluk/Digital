@@ -1436,7 +1436,12 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_restartNeeded">¡Se necesita reiniciar para que se produzcan los cambios!</string>
   <string name="msg_enterAnExpression">Introduce una expresión:</string>
   <string name="msg_showSimplifiedTruthTable">Mostrar tabla de verdad simplificada</string>
-  <string name="msg_truthTableExpressionNote">La expresión mostrada abajo se simplifica independientemente de esta tabla.</string>
+  <string name="msg_simplifyExpression">Simplificar expresión</string>
+  <string name="msg_simplifyExpression_tt">Simplifica la expresión antes de generar el circuito.</string>
+  <string name="msg_unoptimizedExpression">Expresión sin optimizar:</string>
+  <string name="msg_optimizedExpression">Expresión optimizada:</string>
+  <string name="msg_karnaughGroupOnes">Agrupar los unos</string>
+  <string name="msg_karnaughGroupZeros">Agrupar los ceros</string>
   <string name="msg_runningTestError">Error al ejecutar las pruebas:</string>
   <string name="msg_testResult">Resultado de la prueba</string>
   <string name="msg_test_N_Passed">{0} pasado</string>

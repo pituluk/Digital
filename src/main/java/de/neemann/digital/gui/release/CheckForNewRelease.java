@@ -11,6 +11,8 @@ import de.neemann.gui.InfoDialog;
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.prefs.Preferences;
 
 /**
@@ -21,6 +23,7 @@ public final class CheckForNewRelease {
     private static final long ADAY = 24L * 60 * 60 * 1000;
     private static final String PREF_LAST = "last";
     private static final String PREF_ASKED = "asked";
+    private static final Pattern DESCRIBE_COMMIT = Pattern.compile("(?:^|-)g([0-9a-f]{7,40})(?:-dirty)?$");
     private static final Preferences PREFS = Preferences.userRoot().node("dig").node("rev");
 
     private CheckForNewRelease() {
@@ -39,7 +42,8 @@ public final class CheckForNewRelease {
         PREFS.putLong(PREF_LAST, time);
 
         Thread thread = new Thread(() -> {
-            String runningRev = InfoDialog.getInstance().getRevision();
+            InfoDialog infoDialog = InfoDialog.getInstance();
+            String runningRev = infoDialog.getRevision();
             if (runningRev.equals(InfoDialog.UNKNOWN)) return;
 
             try {
@@ -54,7 +58,10 @@ public final class CheckForNewRelease {
 
                     PREFS.put(PREF_ASKED, latestRev);
 
-                    if (isRunningVersionCurrentOrNewer(runningRev, latestRev))
+                    String runningCommit = infoDialog.getCommitId();
+                    if (InfoDialog.UNKNOWN.equals(runningCommit))
+                        runningCommit = getCommitFromRevision(runningRev);
+                    if (isRunningVersionCurrentOrNewer(runningRev, latestRev, runningCommit, info))
                         return;
 
                     SwingUtilities.invokeLater(() -> anInterface.showMessage(latestRev));
@@ -69,6 +76,36 @@ public final class CheckForNewRelease {
 
     static boolean isRunningVersionCurrentOrNewer(String runningRev, String latestRev) {
         return runningRev.equals(latestRev) || runningRev.startsWith(latestRev + "-");
+    }
+
+    private static boolean isRunningVersionCurrentOrNewer(String runningRev, String latestRev,
+                                                           String runningCommit, ReleaseInfo releaseInfo) throws IOException {
+        if (!InfoDialog.UNKNOWN.equals(runningCommit)) {
+            try {
+                String comparison = releaseInfo.compareRunningCommit(runningCommit);
+                return isRunningVersionCurrentOrNewer(runningRev, latestRev, comparison);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return isRunningVersionCurrentOrNewer(runningRev, latestRev);
+    }
+
+    static boolean isRunningVersionCurrentOrNewer(String runningRev, String latestRev, String comparison) {
+        if (isCommitCurrentOrNewer(comparison))
+            return true;
+        if ("behind".equals(comparison))
+            return false;
+        return isRunningVersionCurrentOrNewer(runningRev, latestRev);
+    }
+
+    static boolean isCommitCurrentOrNewer(String comparison) {
+        return "identical".equals(comparison) || "ahead".equals(comparison);
+    }
+
+    static String getCommitFromRevision(String revision) {
+        Matcher matcher = DESCRIBE_COMMIT.matcher(revision);
+        return matcher.find() ? matcher.group(1) : InfoDialog.UNKNOWN;
     }
 
     /**
