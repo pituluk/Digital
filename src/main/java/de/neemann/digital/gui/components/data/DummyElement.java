@@ -51,6 +51,15 @@ public class DummyElement implements Element {
             .addAttribute(Keys.SNAP_TO_GRID);
 
     /**
+     * The image decoration.
+     */
+    public static final ElementTypeDescription IMAGEDESCRIPTION = new ElementTypeDescription("Image", DummyElement.class)
+            .addAttribute(Keys.IMAGE_SOURCE)
+            .addAttribute(Keys.IMAGE_WIDTH)
+            .addAttribute(Keys.IMAGE_HEIGHT)
+            .addAttribute(Keys.SNAP_TO_GRID);
+
+    /**
      * Creates a new dummy element
      *
      * @param attr the attributes

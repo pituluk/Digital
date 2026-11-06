@@ -41,6 +41,7 @@ public class GifExporter extends JDialog implements ModelStateObserverTyped, Mod
     private final Circuit circuit;
     private final GraphicMinMax minMax;
     private final JLabel frameLabel;
+    private final long imageAnimationTimeNanos = System.nanoTime();
     private int frames;
     private FileImageOutputStream output;
     private GifSequenceWriter writer;
@@ -134,7 +135,7 @@ public class GifExporter extends JDialog implements ModelStateObserverTyped, Mod
     }
 
     private BufferedImage createBufferedImage() throws IOException {
-        GraphicsImage gri = new GraphicsImage(null, "gif", 1);
+        GraphicsImage gri = new GraphicsImage(null, "gif", 1, imageAnimationTimeNanos);
         gri.setBoundingBox(minMax.getMin(), minMax.getMax());
         BufferedImage bi = gri.getBufferedImage();
         Graphics gr = bi.getGraphics();

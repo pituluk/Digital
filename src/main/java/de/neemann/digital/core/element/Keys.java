@@ -904,6 +904,24 @@ public final class Keys {
             .setMin(2);
 
     /**
+     * The image source used by an image decoration.
+     */
+    public static final Key.LongString IMAGE_SOURCE
+            = new Key.LongString("ImageSource", "").setRows(1).setColumns(30);
+
+    /**
+     * The image width in grid units.
+     */
+    public static final Key.KeyInteger IMAGE_WIDTH
+            = new Key.KeyInteger("ImageWidth", 6).setMin(1);
+
+    /**
+     * The image height in grid units.
+     */
+    public static final Key.KeyInteger IMAGE_HEIGHT
+            = new Key.KeyInteger("ImageHeight", 6).setMin(1);
+
+    /**
      * the position of the text in the rectangle
      */
     public static final Key<Boolean> RECT_INSIDE

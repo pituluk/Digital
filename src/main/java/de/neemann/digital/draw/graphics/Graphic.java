@@ -7,6 +7,7 @@ package de.neemann.digital.draw.graphics;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.awt.image.BufferedImage;
 
 /**
  * Interface used to draw the circuit.
@@ -69,6 +70,24 @@ public abstract class Graphic implements Closeable {
      * @param style the style
      */
     public abstract void drawCircle(VectorInterface p1, VectorInterface p2, Style style);
+
+    /**
+     * Draws an image into the parallelogram formed by the three corner points.
+     *
+     * @param topLeft     the top-left corner
+     * @param topRight    the top-right corner
+     * @param bottomLeft  the bottom-left corner
+     * @param image       the image
+     */
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+    }
+
+    /**
+     * @return the animation time to use while drawing, in nanoseconds
+     */
+    public long getAnimationTimeNanos() {
+        return System.nanoTime();
+    }
 
     /**
      * Draws a circle for highlighting

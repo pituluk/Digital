@@ -7,6 +7,7 @@ package de.neemann.digital.draw.graphics;
 
 import de.neemann.digital.draw.graphics.text.formatter.GraphicsFormatter;
 
+import java.awt.image.BufferedImage;
 import java.awt.font.FontRenderContext;
 import java.awt.geom.Rectangle2D;
 
@@ -66,6 +67,14 @@ public class GraphicMinMax extends Graphic {
     public void drawCircle(VectorInterface p1, VectorInterface p2, Style style) {
         check(p1);
         check(p2);
+    }
+
+    @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+        check(topLeft);
+        check(topRight);
+        check(bottomLeft);
+        check(topRight.add(bottomLeft).sub(topLeft));
     }
 
     /**

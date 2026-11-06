@@ -17,6 +17,7 @@ import de.neemann.digital.core.memory.rom.ROMManagerFile;
 import de.neemann.digital.draw.elements.PinException;
 import de.neemann.digital.draw.elements.VisualElement;
 import de.neemann.digital.draw.graphics.ColorScheme;
+import de.neemann.digital.draw.graphics.ImageSequence;
 import de.neemann.digital.draw.library.ElementNotFoundException;
 import de.neemann.digital.draw.model.InverterConfig;
 import de.neemann.digital.draw.model.ModelCreator;
@@ -37,10 +38,13 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.lang.reflect.Constructor;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Base64;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 /**
  * Factory used to create an editor for a given key/value pair.
@@ -87,6 +91,8 @@ public final class EditorFactory {
     public <T> Editor<T> create(Key<T> key, T value) {
         if (key == Keys.MIDI_INSTRUMENT)
             return (Editor<T>) new MidiInstrumentEditor(value.toString());
+        if (key == Keys.IMAGE_SOURCE)
+            return (Editor<T>) new ImageEditor((String) value);
 
         Class<? extends Editor> fac = map.get(key.getValueClass());
 
@@ -166,6 +172,92 @@ public final class EditorFactory {
 
     //Checkstyle flags redundant modifiers, which are not redundant. Maybe a bug in checkstyle?
     //CHECKSTYLE.OFF: RedundantModifier
+    final static class ImageEditor extends LabelEditor<String> {
+        private String source;
+        private final JLabel sourceLabel = new JLabel();
+        private final JCheckBox embedImage = new JCheckBox(Lang.get("key_imageEmbedded"));
+        private final JButton loadButton = new JButton(Lang.get("btn_loadImage"));
+        private final JButton clearButton = new JButton(Lang.get("btn_removeImage"));
+
+        public ImageEditor(String value) {
+            setValue(value);
+        }
+
+        @Override
+        protected JComponent getComponent(ElementAttributes attributes) {
+            JPanel panel = new JPanel(new BorderLayout(5, 0));
+            JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+            buttons.add(loadButton);
+            buttons.add(clearButton);
+            panel.add(sourceLabel, BorderLayout.CENTER);
+            panel.add(buttons, BorderLayout.EAST);
+            panel.add(embedImage, BorderLayout.SOUTH);
+            embedImage.setSelected(!source.startsWith("file:"));
+            embedImage.setToolTipText(Lang.get("key_imageEmbedded_tt"));
+
+            loadButton.addActionListener(e -> loadImage(attributes));
+            clearButton.addActionListener(e -> setValue(""));
+            updateSourceLabel();
+            return panel;
+        }
+
+        private void loadImage(ElementAttributes attributes) {
+            File initialFile = source.startsWith("file:")
+                    ? new File(source.substring("file:".length())) : null;
+            JFileChooser fileChooser = new MyFileChooser(initialFile);
+            fileChooser.setFileFilter(new FileNameExtensionFilter(
+                    Lang.get("msg_supportedImages"), "png", "apng", "gif", "jpg", "jpeg", "bmp"));
+            if (fileChooser.showOpenDialog(getAttributeDialog()) != JFileChooser.APPROVE_OPTION)
+                return;
+
+            File file = fileChooser.getSelectedFile();
+            try {
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                String newSource = embedImage.isSelected()
+                        ? "embedded:" + Base64.getEncoder().encodeToString(bytes)
+                        : "file:" + file.getAbsolutePath();
+                ImageSequence image = ImageSequence.load(newSource);
+                attributes.set(Keys.IMAGE_WIDTH, 6);
+                attributes.set(Keys.IMAGE_HEIGHT,
+                        Math.max(1, (int) Math.round(6.0 * image.getHeight() / image.getWidth())));
+                setValue(newSource);
+            } catch (IOException e) {
+                new ErrorMessage(Lang.get("msg_errorLoadingImage")).addCause(e).show(getAttributeDialog());
+            }
+        }
+
+        private void updateSourceLabel() {
+            if (source.isEmpty())
+                sourceLabel.setText(Lang.get("msg_noImageSelected"));
+            else if (source.startsWith("file:"))
+                sourceLabel.setText(new File(source.substring("file:".length())).getName());
+            else
+                sourceLabel.setText(Lang.get("msg_embeddedImage"));
+        }
+
+        @Override
+        public String getValue() {
+            return source;
+        }
+
+        @Override
+        public void setValue(String value) {
+            source = value == null ? "" : value;
+            if (embedImage != null)
+                embedImage.setSelected(!source.startsWith("file:"));
+            if (sourceLabel != null)
+                updateSourceLabel();
+        }
+
+        @Override
+        public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            loadButton.setEnabled(enabled);
+            clearButton.setEnabled(enabled);
+            embedImage.setEnabled(enabled);
+        }
+    }
+
     final static class StringEditor extends LabelEditor<String> {
         private static final String FILE_KEY = "_File";
 

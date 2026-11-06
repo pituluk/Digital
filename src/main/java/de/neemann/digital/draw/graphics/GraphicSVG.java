@@ -12,6 +12,9 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashSet;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.util.Base64;
 
 import static de.neemann.digital.draw.graphics.GraphicSwing.getMirrorYOrientation;
 
@@ -183,6 +186,25 @@ public class GraphicSVG extends Graphic {
                 addStrokeDash(w, style.getDash());
                 w.write(" />\n");
             }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+        try {
+            ByteArrayOutputStream data = new ByteArrayOutputStream();
+            if (!ImageIO.write(image, "png", data))
+                throw new IOException("No PNG image writer available");
+            double scaleX = (topRight.getXFloat() - topLeft.getXFloat()) / image.getWidth();
+            double shearX = (bottomLeft.getXFloat() - topLeft.getXFloat()) / image.getHeight();
+            double shearY = (topRight.getYFloat() - topLeft.getYFloat()) / image.getWidth();
+            double scaleY = (bottomLeft.getYFloat() - topLeft.getYFloat()) / image.getHeight();
+            w.write("<image x=\"0\" y=\"0\" width=\"" + image.getWidth() + "\" height=\"" + image.getHeight()
+                    + "\" transform=\"matrix(" + scaleX + " " + shearY + " " + shearX + " " + scaleY + " "
+                    + topLeft.getXFloat() + " " + topLeft.getYFloat() + ")\" href=\"data:image/png;base64,"
+                    + Base64.getEncoder().encodeToString(data.toByteArray()) + "\" />\n");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

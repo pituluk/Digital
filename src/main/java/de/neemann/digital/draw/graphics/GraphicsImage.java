@@ -20,6 +20,7 @@ public final class GraphicsImage extends GraphicSwing implements Closeable {
     private final OutputStream out;
     private final String format;
     private final float scale;
+    private final long animationTimeNanos;
     private BufferedImage bi;
 
     /**
@@ -30,10 +31,28 @@ public final class GraphicsImage extends GraphicSwing implements Closeable {
      * @param scale  the scaling
      */
     public GraphicsImage(OutputStream out, String format, float scale) {
+        this(out, format, scale, 0);
+    }
+
+    /**
+     * Creates an image using a fixed animation time.
+     *
+     * @param out               the output stream
+     * @param format            the format to write
+     * @param scale             the scaling
+     * @param animationTimeNanos the image animation time, or zero to use the current time
+     */
+    public GraphicsImage(OutputStream out, String format, float scale, long animationTimeNanos) {
         super(null);
         this.out = out;
         this.format = format;
         this.scale = scale;
+        this.animationTimeNanos = animationTimeNanos;
+    }
+
+    @Override
+    public long getAnimationTimeNanos() {
+        return animationTimeNanos == 0 ? super.getAnimationTimeNanos() : animationTimeNanos;
     }
 
     @Override

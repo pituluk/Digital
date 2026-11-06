@@ -5,6 +5,8 @@
  */
 package de.neemann.digital.draw.graphics;
 
+import java.awt.image.BufferedImage;
+
 /**
  * A instance that performs a transformation on the drawing and then draws it on a given delegate.
  */
@@ -40,6 +42,11 @@ public class GraphicTransform extends Graphic {
     }
 
     @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+        parent.drawImage(topLeft.transform(transform), topRight.transform(transform), bottomLeft.transform(transform), image);
+    }
+
+    @Override
     public void drawText(VectorInterface p1, VectorInterface p2, VectorInterface p3, String text, Orientation orientation, Style style) {
         parent.drawText(p1.transform(transform), p2.transform(transform), p3.transform(transform), text, orientation, style);
     }
@@ -47,5 +54,10 @@ public class GraphicTransform extends Graphic {
     @Override
     public boolean isFlagSet(Flag flag) {
         return parent.isFlagSet(flag);
+    }
+
+    @Override
+    public long getAnimationTimeNanos() {
+        return parent.getAnimationTimeNanos();
     }
 }

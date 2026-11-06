@@ -5,6 +5,8 @@
  */
 package de.neemann.digital.draw.graphics;
 
+import java.awt.image.BufferedImage;
+
 /**
  * A instance that performs a modification of styles on the drawing and then draws it on a given delegate.
  */
@@ -46,6 +48,11 @@ public abstract class GraphicRestyle extends Graphic {
     }
 
     @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+        parent.drawImage(topLeft, topRight, bottomLeft, image);
+    }
+
+    @Override
     public void drawText(VectorInterface p1, VectorInterface p2, VectorInterface p3, String text, Orientation orientation, Style style) {
         parent.drawText(p1, p2, p3, text, orientation, getFontStyle(style));
     }
@@ -64,5 +71,10 @@ public abstract class GraphicRestyle extends Graphic {
     @Override
     public boolean isFlagSet(Flag flag) {
         return parent.isFlagSet(flag);
+    }
+
+    @Override
+    public long getAnimationTimeNanos() {
+        return parent.getAnimationTimeNanos();
     }
 }

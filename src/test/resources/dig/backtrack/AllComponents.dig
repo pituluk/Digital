@@ -580,6 +580,11 @@
       <pos x="120" y="900"/>
     </visualElement>
     <visualElement>
+      <elementName>Image</elementName>
+      <elementAttributes/>
+      <pos x="120" y="940"/>
+    </visualElement>
+    <visualElement>
       <elementName>Const</elementName>
       <elementAttributes>
         <entry>

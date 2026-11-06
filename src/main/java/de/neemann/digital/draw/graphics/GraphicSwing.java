@@ -121,6 +121,18 @@ public class GraphicSwing extends Graphic {
     }
 
     @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, java.awt.image.BufferedImage image) {
+        double scaleX = (topRight.getXFloat() - topLeft.getXFloat()) / image.getWidth();
+        double shearX = (bottomLeft.getXFloat() - topLeft.getXFloat()) / image.getHeight();
+        double shearY = (topRight.getYFloat() - topLeft.getYFloat()) / image.getWidth();
+        double scaleY = (bottomLeft.getYFloat() - topLeft.getYFloat()) / image.getHeight();
+        AffineTransform transform = new AffineTransform(
+                scaleX, shearY, shearX, scaleY,
+                topLeft.getXFloat(), topLeft.getYFloat());
+        gr.drawImage(image, transform, null);
+    }
+
+    @Override
     public void drawCircleHighlight(VectorInterface p1, VectorInterface p2, Style style) {
         if (style.getThickness() < highlightSmall.getThickness()) {
             if (style == Style.HIGHLIGHT)

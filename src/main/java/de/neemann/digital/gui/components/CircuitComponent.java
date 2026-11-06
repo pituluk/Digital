@@ -97,7 +97,6 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
         ATTR_LIST.add(Keys.RECOVER_FROM_OSCILLATION);
     }
 
-
     /**
      * @return returns the list of circuit attributes
      */
@@ -113,6 +112,7 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
 
     private final Main parent;
     private final ElementLibrary library;
+    private final ImageAnimationTimer imageAnimationTimer = new ImageAnimationTimer(this);
     private final HashSet<Drawable> highLighted;
     private final ToolTipAction deleteAction;
     private final MouseController mouseNormal;
@@ -510,7 +510,6 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
         }
         return elements;
     }
-
 
     /**
      * Opens the attribute editor
@@ -920,13 +919,11 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
         graphicHasChanged();
     }
 
-
     private BufferedImage buffer;
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-
+        imageAnimationTimer.update();
         boolean newBufferRequired = buffer == null
                 || getWidth() != buffer.getWidth()
                 || getHeight() != buffer.getHeight();
@@ -2276,6 +2273,10 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
 
         @Override
         void clicked(MouseEvent e) {
+            if (WireDoubleClickHandler.select(e, mouse, getCircuit(), getPosVector(e),
+                    transform.getScaleX(), mouseMoveWire::activate))
+                return;
+
             if (mouse.isClickModifier(e)) {
                 Vector pos = raster(getPosVector(e));
                 Wire wire = getCircuit().getWireAt(pos, SIZE2);

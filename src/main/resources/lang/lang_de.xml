@@ -41,6 +41,8 @@
     <string name="btn_loadSvg">Import</string>
     <string name="btn_loadSvg_tt">Importieren einer SVG-Datei. Um eine geeignete SVG Datei zu erstellen, ist es
         am einfachsten zunächst ein Template zu erzeugen und dieses dann zu bearbeiten.</string>
+    <string name="btn_loadImage">Bild auswählen...</string>
+    <string name="btn_removeImage">Bild entfernen</string>
     <string name="msg_warning">Warnung</string>
     <string name="cancel">Abbrechen</string>
     <string name="digital">Digital</string>
@@ -172,6 +174,8 @@
         Hat keine weitere Funktion für die Simulation. Wird als Überschrift ein Minuszeichen eingegeben, entfällt
         die Überschrift.
     </string>
+    <string name="elem_Image">Bild</string>
+    <string name="elem_Image_tt">Zeigt ein statisches oder animiertes Bild in der Schaltung an. Hat keinen Einfluss auf die Simulation.</string>
     <string name="elem_Probe">Messwert</string>
     <string name="elem_Probe_tt">Ein Messwert, welcher im Messwertegraphen bzw. in der Messwertetabelle dargestellt wird.
         Dieses Element kann verwendet werden, um auf einfache Weise Werte aus eingebetteten Schaltungen zu beobachten.
@@ -1561,6 +1565,17 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="key_RectWidth_tt">Breite in Rastereinheiten</string>
     <string name="key_RectHeight">Höhe</string>
     <string name="key_RectHeight_tt">Höhe in Rastereinheiten</string>
+    <string name="key_ImageSource">Bildquelle</string>
+    <string name="key_ImageSource_tt">Bild auswählen und festlegen, ob es in der Schaltungsdatei gespeichert wird.</string>
+    <string name="key_ImageWidth">Bildbreite</string>
+    <string name="key_ImageWidth_tt">Bildbreite in Rastereinheiten</string>
+    <string name="key_ImageHeight">Bildhöhe</string>
+    <string name="key_ImageHeight_tt">Bildhöhe in Rastereinheiten</string>
+    <string name="key_imageEmbedded">Bild in Schaltungsdatei einbetten</string>
+    <string name="key_imageEmbedded_tt">Diese Auswahl gilt für das nächste ausgewählte Bild.</string>
+    <string name="msg_supportedImages">Bilddateien (PNG, APNG, GIF, JPEG, BMP)</string>
+    <string name="msg_noImageSelected">Kein Bild ausgewählt</string>
+    <string name="msg_embeddedImage">Eingebettetes Bild</string>
     <string name="key_RectInside">Text innen</string>
     <string name="key_RectInside_tt">Text ins Innere des Rechtecks setzen.</string>
     <string name="key_RectBottom">Text unten</string>
@@ -2184,6 +2199,8 @@ Stellen Sie sicher, dass der Flash-Vorgang abgeschlossen ist, bevor Sie diesen D
     <string name="msg_truthTable">Wahrheitstabelle</string>
     <string name="msg_truthTableCSV">Comma Separated Values, CSV</string>
     <string name="msg_errorImportingSvg">Fehler beim Import der SVG-Datei.</string>
+    <string name="msg_errorLoadingImage">Das Bild konnte nicht geladen werden.</string>
+    <string name="msg_imageLoadFailed">Bild nicht verfügbar</string>
     <string name="msg_errorCreatingSvgTemplate">Fehler beim Erzeugen der SVG-Datei.</string>
     <string name="msg_couldNotCreateStats">Statistik konnte nicht erzeugt werden.</string>
 

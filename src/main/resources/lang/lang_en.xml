@@ -41,6 +41,8 @@
     <string name="btn_loadSvg">Import</string>
     <string name="btn_loadSvg_tt">Import an SVG file. To create a suitable SVG file, it is easiest to first create
         a SVG template and then edit it.</string>
+    <string name="btn_loadImage">Choose image...</string>
+    <string name="btn_removeImage">Remove image</string>
     <string name="msg_warning">Warning</string>
     <string name="cancel">Cancel</string>
     <string name="digital">Digital</string>
@@ -183,6 +185,8 @@
     <string name="elem_Rectangle_tt">Shows a rectangle in the circuit.
         Does not affect the simulation. If a minus sign is used as the heading, the heading is omitted.
     </string>
+    <string name="elem_Image">Image</string>
+    <string name="elem_Image_tt">Shows a still or animated image in the circuit. Does not affect the simulation.</string>
     <string name="elem_Probe">Probe</string>
     <string name="elem_Probe_tt">A measurement value which can be shown in the data graph or measurement table.
         This component can be used to easily observe values from embedded circuits.
@@ -1549,6 +1553,17 @@
     <string name="key_RectWidth_tt">Width in grid units</string>
     <string name="key_RectHeight">Height</string>
     <string name="key_RectHeight_tt">Height in grid units</string>
+    <string name="key_ImageSource">Image source</string>
+    <string name="key_ImageSource_tt">Choose an image and whether to embed it in the circuit file.</string>
+    <string name="key_ImageWidth">Image width</string>
+    <string name="key_ImageWidth_tt">Image width in grid units</string>
+    <string name="key_ImageHeight">Image height</string>
+    <string name="key_ImageHeight_tt">Image height in grid units</string>
+    <string name="key_imageEmbedded">Embed image in circuit file</string>
+    <string name="key_imageEmbedded_tt">This choice applies when you next choose an image.</string>
+    <string name="msg_supportedImages">Image files (PNG, APNG, GIF, JPEG, BMP)</string>
+    <string name="msg_noImageSelected">No image selected</string>
+    <string name="msg_embeddedImage">Embedded image</string>
     <string name="key_RectInside">Text Inside</string>
     <string name="key_RectInside_tt">Place text inside the rectangle.</string>
     <string name="key_RectBottom">Text at the bottom</string>
@@ -2175,6 +2190,8 @@
     <string name="msg_truthTable">Truth Table</string>
     <string name="msg_truthTableCSV">Comma Separated Values, CSV</string>
     <string name="msg_errorImportingSvg">Error while importing the SVG file.</string>
+    <string name="msg_errorLoadingImage">Unable to load the image.</string>
+    <string name="msg_imageLoadFailed">Image unavailable</string>
     <string name="msg_errorCreatingSvgTemplate">Error creating the SVG template.</string>
     <string name="msg_couldNotCreateStats">Statistics could not be created.</string>
     <string name="msg_errorReadingToolchainConfig_N">Error while reading the toolchain configuration {0}</string>

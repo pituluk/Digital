@@ -7,6 +7,8 @@ package de.neemann.digital.draw.graphics.linemerger;
 
 import de.neemann.digital.draw.graphics.*;
 
+import java.awt.image.BufferedImage;
+
 /**
  * Filters out all the lines.
  * All other drawing elements are delegated to the given class.
@@ -40,6 +42,11 @@ public class GraphicSkipLines extends Graphic {
     }
 
     @Override
+    public void drawImage(VectorInterface topLeft, VectorInterface topRight, VectorInterface bottomLeft, BufferedImage image) {
+        delegate.drawImage(topLeft, topRight, bottomLeft, image);
+    }
+
+    @Override
     public void drawText(VectorInterface p1, VectorInterface p2, VectorInterface p3, String text, Orientation orientation, Style style) {
         delegate.drawText(p1, p2, p3, text, orientation, style);
     }
@@ -57,5 +64,10 @@ public class GraphicSkipLines extends Graphic {
     @Override
     public boolean isFlagSet(Flag flag) {
         return delegate.isFlagSet(flag);
+    }
+
+    @Override
+    public long getAnimationTimeNanos() {
+        return delegate.getAnimationTimeNanos();
     }
 }
