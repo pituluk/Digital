@@ -621,7 +621,6 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
             FragmentVisualElement output = combinatorialOutputs.get(lv);
             if (output != null) {
                 if (preserveSharedOutputPins) {
-                    output.traverse(new ReplaceOutputByTunnel(lv, shapeFactory));
                     sharedOutputFragments.put(lv, output);
                 } else {
                     output.traverse(new ReplaceOutputByTunnel(lv, shapeFactory));
@@ -631,17 +630,26 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     }
 
     private void addSharedOutputPins(Circuit circuit) {
+        java.util.HashSet<String> occupiedTunnelPositions = new java.util.HashSet<>();
+        for (VisualElement existing : circuit.getElements(element -> true)) {
+            Vector pos = existing.getPos();
+            occupiedTunnelPositions.add(pos.x + ":" + pos.y);
+        }
         for (HashMap.Entry<String, FragmentVisualElement> entry : sharedOutputFragments.entrySet()) {
-            VisualElement tunnel = entry.getValue().getVisualElement();
-            Vector tunnelPosition = tunnel.getPos();
-            Vector outPosition = new Vector(tunnelPosition.x + SIZE, tunnelPosition.y);
-            VisualElement out = new VisualElement(Out.DESCRIPTION.getName())
+            VisualElement out = entry.getValue().getVisualElement();
+            out.getElementAttributes().set(Keys.IN_OUT_SMALL, true);
+            Vector source = out.getPos();
+
+            Vector tunnelPosition = new Vector(source.x, source.y - SIZE);
+            while (!occupiedTunnelPositions.add(tunnelPosition.x + ":" + tunnelPosition.y))
+                tunnelPosition = new Vector(tunnelPosition.x, tunnelPosition.y - SIZE);
+
+            VisualElement tunnel = new VisualElement(Tunnel.DESCRIPTION.getName())
                     .setShapeFactory(shapeFactory)
-                    .setPos(outPosition);
-            out.getElementAttributes().set(Keys.LABEL, entry.getKey());
-            checkPinNumber(out);
-            circuit.add(out);
-            circuit.add(new Wire(tunnelPosition, outPosition));
+                    .setPos(tunnelPosition);
+            tunnel.getElementAttributes().set(Keys.NETNAME, entry.getKey());
+            circuit.add(tunnel);
+            circuit.add(new Wire(source, tunnelPosition));
         }
     }
 
