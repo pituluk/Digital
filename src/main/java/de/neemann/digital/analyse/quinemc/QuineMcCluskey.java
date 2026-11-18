@@ -102,9 +102,9 @@ public class QuineMcCluskey {
         int newCplx = newExp.traverse(new ComplexityInclNotVisitor()).getComplexity();
 
         if (newCplx < initialCplx)
-            return newExp;
-        else
-            return expression;
+            expression = newExp;
+
+        return expression;
     }
 
     /**
@@ -229,6 +229,96 @@ public class QuineMcCluskey {
 
         Expression e = addAnd(null, primes, variables);
         return addAnd(e, rows, variables);
+    }
+
+    /**
+     * Replaces an exact parity/XNOR truth function with XOR/XNOR expressions.
+     *
+     * @param expression expression to inspect
+     * @return parity expression or the original expression
+     * @throws ExpressionException ExpressionException
+     */
+    public static Expression recognizeParity(Expression expression) throws ExpressionException {
+        ContextFiller context = new ContextFiller(expression);
+        if (context.getVarCount() >= 2) {
+            boolean parity = true;
+            boolean xnor = true;
+            for (int row = 0; row < context.getRowCount(); row++) {
+                context.setContextTo(row);
+                boolean result = expression.calculate(context);
+                boolean odd = Integer.bitCount(row) % 2 != 0;
+                parity &= result == odd;
+                xnor &= result == !odd;
+            }
+            if (parity || xnor) {
+                Expression xor = context.getVar(0);
+                for (int i = 1; i < context.getVarCount(); i++)
+                    xor = Operation.xor(xor, context.getVar(i));
+                Expression parityExpression = xnor ? Not.not(xor) : xor;
+                int parityCplx = parityExpression.traverse(new ComplexityInclNotVisitor()).getComplexity();
+                if (parityCplx < expression.traverse(new ComplexityInclNotVisitor()).getComplexity())
+                    return parityExpression;
+            }
+        }
+        return expression;
+    }
+
+    /**
+     * Finds a minimal XOR/XNOR expression matching all specified table values.
+     * Don't-care values are ignored.
+     *
+     * @param vars variables
+     * @param boolTable truth table
+     * @return matching XOR/XNOR expression, or null
+     * @throws ExpressionException ExpressionException
+     */
+    public static Expression recognizeParity(List<Variable> vars, BoolTable boolTable) throws ExpressionException {
+        if (vars.size() < 1 || boolTable.size() != 1 << vars.size())
+            return null;
+
+        Expression best = null;
+        int bestComplexity = Integer.MAX_VALUE;
+        int bestVariableCount = 0;
+        for (int mask = 1; mask < 1 << vars.size(); mask++) {
+            Expression xor = null;
+            int variableCount = 0;
+            for (int i = 0; i < vars.size(); i++) {
+                if ((mask & (1 << i)) != 0) {
+                    xor = xor == null ? vars.get(i).copy() : Operation.xor(xor, vars.get(i).copy());
+                    variableCount++;
+                }
+            }
+            if (xor == null)
+                continue;
+
+            for (boolean invert : new boolean[]{false, true}) {
+                Expression candidate = invert ? Not.not(xor.copy()) : xor.copy();
+                if (matchesTable(candidate, vars, boolTable)) {
+                    int complexity = candidate.traverse(new ComplexityInclNotVisitor()).getComplexity();
+                    if (variableCount > bestVariableCount
+                            || (variableCount == bestVariableCount && complexity < bestComplexity)) {
+                        best = candidate;
+                        bestComplexity = complexity;
+                        bestVariableCount = variableCount;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private static boolean matchesTable(Expression expression, List<Variable> vars, BoolTable boolTable)
+            throws ExpressionException {
+        ContextFiller context = new ContextFiller(vars);
+        for (int row = 0; row < boolTable.size(); row++) {
+            ThreeStateValue value = boolTable.get(row);
+            if (value == ThreeStateValue.dontCare)
+                continue;
+            context.setContextTo(row);
+            if (expression.calculate(context) != (value == ThreeStateValue.one))
+                return false;
+        }
+        return true;
     }
 
     /**

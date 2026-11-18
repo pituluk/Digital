@@ -8,12 +8,17 @@ package de.neemann.digital.gui.components.table;
 import de.neemann.digital.analyse.expression.Expression;
 import de.neemann.digital.analyse.expression.ExpressionException;
 import de.neemann.digital.analyse.expression.NamedExpression;
+import de.neemann.digital.analyse.expression.VariableVisitor;
 import de.neemann.digital.analyse.expression.format.FormatToExpression;
 import de.neemann.digital.analyse.expression.format.FormatterException;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * ExpressionListenerStore stores the generated expressions for later use.
@@ -60,9 +65,38 @@ public class ExpressionListenerStore implements ExpressionListener {
     public void replayTo(ExpressionListener listener) throws FormatterException, ExpressionException {
         if (!closed)
             throw new ExpressionException("ExpressionListenerStore not closed");
-
-        for (Result r : results)
+        for (Result r : getDependencyOrderedResults())
             listener.resultFound(r.name, r.expression.copy());
+    }
+
+    private List<Result> getDependencyOrderedResults() {
+        Map<String, Result> byName = new HashMap<>();
+        for (Result result : results)
+            byName.put(result.name, result);
+
+        ArrayList<Result> ordered = new ArrayList<>();
+        Set<String> emitted = new HashSet<>();
+        for (Result result : results)
+            visitDependencies(result, byName, emitted, ordered);
+        return ordered;
+    }
+
+    private void visitDependencies(Result result, Map<String, Result> byName,
+                                   Set<String> emitted, List<Result> ordered) {
+        if (!emitted.add(result.name))
+            return;
+        Set<String> dependencies = new HashSet<>();
+        result.expression.traverse(new VariableVisitor()).getVariables()
+                .forEach(variable -> {
+                    if (byName.containsKey(variable.getIdentifier()))
+                        dependencies.add(variable.getIdentifier());
+                });
+        for (String dependency : dependencies) {
+            Result dependencyResult = byName.get(dependency);
+            if (dependencyResult != null)
+                visitDependencies(dependencyResult, byName, emitted, ordered);
+        }
+        ordered.add(result);
     }
 
     /**

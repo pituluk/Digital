@@ -1518,8 +1518,6 @@ In the file howTo.md you can find more details about translations.
     <string name="menu_view">Visualizza</string>
     <string name="menu_zoomIn">Incrementa Zoom</string>
     <string name="menu_zoomOut">Decrementa Zoom</string>
-    <string name="menu_expression">Espressione</string>
-    <string name="menu_expression_tt">Crea un circuito da un'espressione.</string>
     <string name="menu_runTests">Esegui Test</string>
     <string name="menu_runTests_tt">Esegue tutti i test case del circuito</string>
     <string name="menu_actualToDefault">Imposta gli Ingressi Predefiniti</string>

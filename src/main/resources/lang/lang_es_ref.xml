@@ -1430,8 +1430,6 @@ In the file howTo.md you can find more details about translations.
   <string name="menu_view">View</string>
   <string name="menu_zoomIn">Zoom In</string>
   <string name="menu_zoomOut">Zoom Out</string>
-  <string name="menu_expression">Expression</string>
-  <string name="menu_expression_tt">Create a circuit from an expression.</string>
   <string name="menu_runTests">Run Tests</string>
   <string name="menu_runTests_tt">Runs all test cases in the circuit</string>
   <string name="menu_actualToDefault">Set Input Defaults</string>
@@ -1522,7 +1520,7 @@ In the file howTo.md you can find more details about translations.
   <string name="msg_restartNeeded">A restart is required for the changes to take effect!</string>
   <string name="msg_enterAnExpression">Enter an expression:</string>
   <string name="msg_showSimplifiedTruthTable">Show simplified truth table</string>
-  <string name="msg_simplifyExpression">Simplify expression</string>
+  <string name="msg_simplifyExpression">Use simplified expression</string>
   <string name="msg_simplifyExpression_tt">Simplify the expression before generating the circuit.</string>
   <string name="msg_unoptimizedExpression">Unoptimized expression:</string>
   <string name="msg_optimizedExpression">Optimized expression:</string>

@@ -13,9 +13,14 @@ import de.neemann.digital.analyse.expression.NamedExpression;
 import de.neemann.digital.analyse.expression.Variable;
 import de.neemann.digital.analyse.expression.VariableVisitor;
 import de.neemann.digital.analyse.expression.format.FormatToExpression;
+import de.neemann.digital.analyse.expression.modify.ExpressionModifier;
 import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -46,12 +51,25 @@ public final class ExpressionToTruthTable {
      * @throws ExpressionException if an expression cannot be evaluated
      */
     public static TruthTable create(ArrayList<Expression> expressions, boolean simplify) throws ExpressionException {
+        Map<String, Expression> namedExpressions = new HashMap<>();
+        for (Expression expression : expressions) {
+            if (expression instanceof NamedExpression) {
+                NamedExpression named = (NamedExpression) expression;
+                namedExpressions.put(named.getName(), named.getExpression().copy());
+            }
+        }
+
+        Map<String, Expression> resolvedNamedExpressions = new HashMap<>();
+        for (String name : namedExpressions.keySet())
+            resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, new HashSet<>());
+
         ArrayList<Expression> functions = new ArrayList<>();
         TreeSet<Variable> variableSet = new TreeSet<>();
         for (Expression expression : expressions) {
             Expression function = expression instanceof NamedExpression
                     ? ((NamedExpression) expression).getExpression()
                     : expression;
+            function = resolveExpression(function.copy(), namedExpressions, resolvedNamedExpressions, new HashSet<>());
             if (simplify)
                 function = QuineMcCluskey.simplify(function);
             functions.add(function);
@@ -78,5 +96,61 @@ public final class ExpressionToTruthTable {
             }
         }
         return truthTable;
+    }
+
+    private static Expression resolveNamedExpression(
+            String name,
+            Map<String, Expression> namedExpressions,
+            Map<String, Expression> resolvedNamedExpressions,
+            Set<String> resolving) throws ExpressionException {
+        Expression resolved = resolvedNamedExpressions.get(name);
+        if (resolved != null)
+            return resolved.copy();
+        if (!resolving.add(name))
+            throw new ExpressionException("Circular expression alias: " + name);
+
+        Expression expression = namedExpressions.get(name);
+        if (expression == null)
+            throw new ExpressionException("Expression alias not found: " + name);
+
+        try {
+            resolved = resolveExpression(expression.copy(), namedExpressions, resolvedNamedExpressions, resolving);
+            resolvedNamedExpressions.put(name, resolved.copy());
+        } finally {
+            resolving.remove(name);
+        }
+        return resolved.copy();
+    }
+
+    private static Expression resolveExpression(
+            Expression expression,
+            Map<String, Expression> namedExpressions,
+            Map<String, Expression> resolvedNamedExpressions,
+            Set<String> resolving) throws ExpressionException {
+        try {
+            return ExpressionModifier.modifyExpression(expression.copy(), variableExpression -> {
+                if (variableExpression instanceof Variable) {
+                    String name = ((Variable) variableExpression).getIdentifier();
+                    if (namedExpressions.containsKey(name)) {
+                        try {
+                            return resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, resolving);
+                        } catch (ExpressionException e) {
+                            throw new AliasResolutionException(e);
+                        }
+                    }
+                }
+                return variableExpression;
+            });
+        } catch (AliasResolutionException e) {
+            throw e.expressionException;
+        }
+    }
+
+    private static final class AliasResolutionException extends RuntimeException {
+        private final ExpressionException expressionException;
+
+        private AliasResolutionException(ExpressionException expressionException) {
+            this.expressionException = expressionException;
+        }
     }
 }

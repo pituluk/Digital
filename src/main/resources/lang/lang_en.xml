@@ -1964,8 +1964,6 @@
     <string name="menu_view">View</string>
     <string name="menu_zoomIn">Zoom In</string>
     <string name="menu_zoomOut">Zoom Out</string>
-    <string name="menu_expression">Expression</string>
-    <string name="menu_expression_tt">Create a circuit from an expression.</string>
     <string name="menu_runTests">Run Tests</string>
     <string name="menu_runTests_tt">Runs all test cases in the circuit</string>
     <string name="menu_actualToDefault">Set Input Defaults</string>
@@ -2088,12 +2086,14 @@
     <string name="msg_remoteUnknownCommand">Command {0} unknown!</string>
     <string name="msg_enterAnExpression">Enter an expression:</string>
     <string name="msg_showSimplifiedTruthTable">Show simplified truth table</string>
-    <string name="msg_simplifyExpression">Simplify expression</string>
+    <string name="msg_simplifyExpression">Use simplified expression</string>
     <string name="msg_simplifyExpression_tt">Simplify the expression before generating the circuit.</string>
     <string name="msg_unoptimizedExpression">Unoptimized expression:</string>
     <string name="msg_optimizedExpression">Optimized expression:</string>
     <string name="msg_karnaughGroupOnes">Group 1s</string>
     <string name="msg_karnaughGroupZeros">Group 0s</string>
+    <string name="msg_applyDeMorgan">Use De Morgan laws and cache outputs</string>
+    <string name="msg_applyDeMorgan_tt">Simplify optimized expressions with De Morgan laws and reuse computed subexpressions.</string>
     <string name="msg_runningTestError">Error running the tests:</string>
     <string name="msg_testResult">Test result</string>
     <string name="msg_test_N_Passed">{0} passed</string>
@@ -2293,9 +2293,10 @@
         Not: "!", "~", "¬"
         </p>
         <p>As usual AND precedes OR and XOr.</p>
-        <p>Multiple expressions can be separated by "," or ";".
-        If you want to name the expressions you can use the
-        let command: "let U=A+B, let V=A*B".</p>]]>
+        <p>Multiple expressions can be separated by ",", ";" or a newline.
+        An expression can be named with "let U=A+B", or by assigning directly:
+        "U=A+B". Multiple named outputs can be listed one per line:
+        "P1=A*B\nP2=!A+B".</p>]]>
     </string>
     <string name="msg_testVectorHelpTitle">Test vectors</string>
     <string name="msg_testVectorHelp"><![CDATA[<html>

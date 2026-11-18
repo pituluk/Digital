@@ -746,8 +746,6 @@ In the file howTo.md you can find more details about translations.
   <string name="menu_view">视图</string>
   <string name="menu_zoomIn">放大</string>
   <string name="menu_zoomOut">缩小</string>
-  <string name="menu_expression">表达式</string>
-  <string name="menu_expression_tt">从表达式创建电路</string>
   <string name="menu_runTests">运行测试用例(当前电路)</string>
   <string name="menu_runTests_tt">运行当前电路中的所有测试用例</string>
   <string name="menu_actualToDefault">设置默认输入信号</string>

@@ -1410,8 +1410,6 @@ In the file howTo.md you can find more details about translations.
   <string name="menu_view">Visualizar</string>
   
   
-  <string name="menu_expression">Expressão</string>
-  <string name="menu_expression_tt">Criar circuito dada a expressão.</string>
   <string name="menu_runTests">Executar testes</string>
   <string name="menu_runTests_tt">Executar todos os casos de testes</string>
   <string name="menu_actualToDefault">Definir entradas padrões</string>

@@ -22,6 +22,7 @@ import de.neemann.digital.core.flipflops.FlipflopD;
 import de.neemann.digital.core.io.Const;
 import de.neemann.digital.core.io.In;
 import de.neemann.digital.core.io.Out;
+import de.neemann.digital.core.basic.XOr;
 import de.neemann.digital.core.memory.LookUpTable;
 import de.neemann.digital.draw.elements.Circuit;
 import de.neemann.digital.draw.elements.Pin;
@@ -359,6 +360,82 @@ public class CircuitBuilderTest extends TestCase {
         te.check(1, 1, 0, 1, 0);
         te.check(1, 1, 1, 0, 0);
         te.check(1, 1, 1, 1, 0);
+    }
+
+    public void testDirectAssignmentLocalVars() throws IOException, ParseException, BuilderException, ElementNotFoundException, PinException, NodeException {
+        ArrayList<Expression> expList = new Parser("a1=a+b;\na2=c+d;\ny=a1^a2", true).parse();
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder circuitBuilder = new CircuitBuilder(new ShapeFactory(library)).setResolveLocalVars(true);
+        for (Expression exp : expList) {
+            assertTrue(exp instanceof NamedExpression);
+            NamedExpression ne = (NamedExpression) exp;
+            circuitBuilder.addCombinatorial(ne.getName(), ne.getExpression());
+        }
+        Circuit circuit = circuitBuilder.createCircuit();
+
+        List<VisualElement> outs = circuit.getElements(v -> v.equalsDescription(Out.DESCRIPTION));
+        assertEquals(1, outs.size());
+        assertEquals("y", outs.get(0).getElementAttributes().getLabel());
+        assertEquals(4, circuit.getElements(v -> v.equalsDescription(Tunnel.DESCRIPTION)).size());
+
+        ModelCreator m = new ModelCreator(circuit, library);
+        TestExecuter te = new TestExecuter(m.createModel(false)).setUp(m);
+        te.check(0, 0, 0, 0, 0);
+        te.check(0, 0, 1, 1, 1);
+        te.check(1, 1, 0, 0, 1);
+        te.check(1, 1, 1, 1, 0);
+    }
+
+    public void testReuseComputedSubExpressions() throws Exception {
+        ArrayList<Expression> expressions = new Parser(
+                "P2=A^C\nP1=P2^B\nM=P1", true).parse();
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder builder = new CircuitBuilder(new ShapeFactory(library))
+                .setResolveLocalVars(true)
+                .setPreserveSharedOutputPins(true);
+        for (Expression expression : expressions) {
+            NamedExpression named = (NamedExpression) expression;
+            builder.addCombinatorial(named.getName(), named.getExpression());
+        }
+        Circuit circuit = builder.createCircuit();
+        assertEquals(2, circuit.getElements(v -> v.equalsDescription(XOr.DESCRIPTION)).size());
+        assertEquals(0, circuit.getElements(v -> v.equalsDescription(In.DESCRIPTION)
+                && "P1".equals(v.getElementAttributes().getLabel())).size());
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(Out.DESCRIPTION)
+                && "P1".equals(v.getElementAttributes().getLabel())).size());
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(Out.DESCRIPTION)
+                && "P2".equals(v.getElementAttributes().getLabel())).size());
+        assertTrue(circuit.getElements(v -> v.equalsDescription(Tunnel.DESCRIPTION)
+                && "P1".equals(v.getElementAttributes().get(Keys.NETNAME))).size() >= 1);
+        assertTrue(circuit.getElements(v -> v.equalsDescription(Tunnel.DESCRIPTION)
+                && "P2".equals(v.getElementAttributes().get(Keys.NETNAME))).size() >= 1);
+
+        ModelCreator modelCreator = new ModelCreator(circuit, library);
+        TestExecuter te = new TestExecuter(modelCreator.createModel(false)).setUp(modelCreator);
+        for (int a = 0; a < 2; a++)
+            for (int b = 0; b < 2; b++)
+                for (int c = 0; c < 2; c++) {
+                    int p2 = a ^ c;
+                    int p1 = p2 ^ b;
+                    java.util.HashMap<String, Integer> values = new java.util.HashMap<>();
+                    values.put("P1", p1);
+                    values.put("P2", p2);
+                    values.put("M", p1);
+                    values.put("E", c == 0 ? 1 : 0);
+                    long[] outputValues = new long[modelCreator.getEntries("Out").size()];
+                    int index = 0;
+                    for (de.neemann.digital.draw.model.ModelEntry entry
+                            : modelCreator.getEntries("Out")) {
+                        outputValues[index++] = values.getOrDefault(
+                                entry.getVisualElement().getElementAttributes().getLabel(), 0);
+                    }
+                    long[] checkValues = new long[3 + outputValues.length];
+                    checkValues[0] = a;
+                    checkValues[1] = b;
+                    checkValues[2] = c;
+                    System.arraycopy(outputValues, 0, checkValues, 3, outputValues.length);
+                    te.check(checkValues);
+                }
     }
 
     public void testBuilder74xx() throws Exception {

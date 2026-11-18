@@ -1941,8 +1941,6 @@ In the file howTo.md you can find more details about translations.
     <string name="menu_view">Affichage</string>
     <string name="menu_zoomIn">Zoom avant</string>
     <string name="menu_zoomOut">Zoom arrière</string>
-    <string name="menu_expression">Expression</string>
-    <string name="menu_expression_tt">Crée un circuit à partir d'une expression</string>
     <string name="menu_runTests">Exécuter les tests</string>
     <string name="menu_runTests_tt">Exécute tous les tests du circuit</string>
     <string name="menu_actualToDefault">Fixer les entrées</string>

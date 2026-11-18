@@ -115,7 +115,7 @@ public class ExpressionDialog extends JDialog {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-                    ArrayList<Expression> expList = new Parser(text.getText()).parse();
+                    ArrayList<Expression> expList = new Parser(text.getText(), true).parse();
                     CircuitVariant variant = (CircuitVariant) variantPicker.getSelectedItem();
                     if (variant == null) {
                         variant = variantPicker.getItemAt(0);

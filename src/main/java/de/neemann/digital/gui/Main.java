@@ -33,7 +33,6 @@ import de.neemann.digital.draw.shapes.ShapeFactory;
 import de.neemann.digital.fsm.gui.FSMFrame;
 import de.neemann.digital.gui.components.*;
 import de.neemann.digital.gui.components.data.GraphDialog;
-import de.neemann.digital.gui.components.expression.ExpressionDialog;
 import de.neemann.digital.gui.components.modification.ModifyAttribute;
 import de.neemann.digital.gui.components.modification.ModifyMeasurementOrdering;
 import de.neemann.digital.gui.components.table.TableDialog;
@@ -1286,15 +1285,6 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
             }
         }
                 .setToolTip(Lang.get("menu_synthesise_tt"))
-                .createJMenuItem());
-
-        analyse.add(new ToolTipAction(Lang.get("menu_expression")) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                new ExpressionDialog(Main.this, library, shapeFactory, getBaseFileName()).setVisible(true);
-            }
-        }
-                .setToolTip(Lang.get("menu_expression_tt"))
                 .createJMenuItem());
 
         analyse.addSeparator();

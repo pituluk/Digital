@@ -148,6 +148,29 @@ public class ParserTest extends TestCase {
         assertEquals(((NamedExpression) expList.get(2)).getExpression(), new Variable("c"));
     }
 
+    public void testParseDirectAssignmentsAndLines() throws Exception {
+        String source = "P1 = (A * !B * !C) + (A * B * C)\n"
+                + "P2 = (A * !B * !C) + (A * B * !C)\n"
+                + "M = (A * !B * !C) + (A * B * C)\n"
+                + "E = (!A * !B * !C) + (A * !B * !C) + (A * B * !C)";
+        ArrayList<Expression> expressions = new Parser(source, true).parse();
+        assertEquals(4, expressions.size());
+        assertEquals("P1", ((NamedExpression) expressions.get(0)).getName());
+        assertEquals("P2", ((NamedExpression) expressions.get(1)).getName());
+        assertEquals("M", ((NamedExpression) expressions.get(2)).getName());
+        assertEquals("E", ((NamedExpression) expressions.get(3)).getName());
+    }
+
+    public void testDirectAssignmentModeKeepsEqualityForA() throws Exception {
+        assertEquals("not(xor(a,b))", createSingle("a=b").toString());
+        ArrayList<Expression> expressions = new Parser("P1=1\nP2=P1", true).parse();
+        assertEquals(2, expressions.size());
+        assertEquals("P1", ((NamedExpression) expressions.get(0)).getName());
+        assertEquals(Constant.ONE, ((NamedExpression) expressions.get(0)).getExpression());
+        assertEquals("P2", ((NamedExpression) expressions.get(1)).getName());
+        assertEquals(new Variable("P1"), ((NamedExpression) expressions.get(1)).getExpression());
+    }
+
     public void testParseRegression() throws Exception {
         Expression e = createSingle("B*(B+A)*(B+C)*(A+B+C)");
         Expression simplified = QuineMcCluskey.simplify(e);

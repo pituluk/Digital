@@ -119,6 +119,15 @@ public class Tokenizer {
             case ',':
                 token = Token.COMMA;
                 break;
+            case '\r':
+                c = readChar();
+                if (c != '\n')
+                    unreadChar(c);
+                token = Token.COMMA;
+                break;
+            case '\n':
+                token = Token.COMMA;
+                break;
             case '=':
                 token = Token.EQUAL;
                 break;
@@ -182,7 +191,7 @@ public class Tokenizer {
     }
 
     private boolean isWhiteSpace(int c) {
-        return c == ' ' || c == '\n' || c == '\r' || c == '\t';
+        return c == ' ' || c == '\t';
     }
 
     @Override

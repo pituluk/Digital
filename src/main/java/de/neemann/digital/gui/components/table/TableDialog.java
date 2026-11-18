@@ -14,6 +14,8 @@ import de.neemann.digital.analyse.expression.ExpressionException;
 import de.neemann.digital.analyse.expression.NamedExpression;
 import de.neemann.digital.analyse.expression.Not;
 import de.neemann.digital.analyse.expression.Variable;
+import de.neemann.digital.analyse.expression.ComplexityInclNotVisitor;
+import de.neemann.digital.analyse.expression.Operation;
 import de.neemann.digital.analyse.expression.format.FormatToExpression;
 import de.neemann.digital.analyse.expression.format.FormatterException;
 import de.neemann.digital.analyse.expression.modify.*;
@@ -22,6 +24,8 @@ import de.neemann.digital.analyse.format.TruthTableFormatterCSV;
 import de.neemann.digital.analyse.format.TruthTableFormatterHex;
 import de.neemann.digital.analyse.format.TruthTableFormatterTestCase;
 import de.neemann.digital.analyse.quinemc.BoolTableByteArray;
+import de.neemann.digital.analyse.quinemc.BoolTable;
+import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
 import de.neemann.digital.builder.ATF150x.ATFDevice;
 import de.neemann.digital.builder.ExpressionToFileExporter;
 import de.neemann.digital.builder.Gal16v8.CuplExporter;
@@ -73,6 +77,9 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.prefs.Preferences;
 
@@ -128,6 +135,7 @@ public class TableDialog extends JDialog {
     private JLabel expressionInputStatus;
     private JRadioButton implicantsExpression;
     private JRadioButton implicentsExpression;
+    private JCheckBox deMorganExpression;
     private Timer expressionUpdateTimer;
     private JPanel expressionResultsPanel;
     private JPanel expressionTypePanel;
@@ -135,6 +143,7 @@ public class TableDialog extends JDialog {
     private JPanel optimizedExpressionRow;
     private JCheckBoxMenuItem createJK;
     private JCheckBoxMenuItem useSwitchesAndLeds;
+    private JCheckBoxMenuItem useOptimizedExpressions;
     private File filename;
     private int columnIndex;
     private ExpressionListenerStore lastGeneratedExpressions;
@@ -354,7 +363,19 @@ public class TableDialog extends JDialog {
         sourceExpressionText.setWrapStyleWord(true);
         panel.add(new JScrollPane(sourceExpressionText), BorderLayout.CENTER);
         expressionInputStatus = new JLabel(" ");
-        panel.add(expressionInputStatus, BorderLayout.SOUTH);
+        JPanel status = new JPanel(new BorderLayout(4, 0));
+        status.add(expressionInputStatus, BorderLayout.CENTER);
+        status.add(new ToolTipAction(Lang.get("btn_help")) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                new ShowStringDialog(
+                        TableDialog.this,
+                        Lang.get("msg_expressionHelpTitle"),
+                        Lang.get("msg_expressionHelp"), true)
+                        .setVisible(true);
+            }
+        }.createJButton(), BorderLayout.EAST);
+        panel.add(status, BorderLayout.SOUTH);
         expressionUpdateTimer = new Timer(250, event -> updateTableFromExpression());
         expressionUpdateTimer.setRepeats(false);
         sourceExpressionText.getDocument().addDocumentListener(new DocumentListener() {
@@ -386,9 +407,13 @@ public class TableDialog extends JDialog {
         expressionTypePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         expressionTypePanel.add(implicantsExpression);
         expressionTypePanel.add(implicentsExpression);
+        deMorganExpression = new JCheckBox(Lang.get("msg_applyDeMorgan"));
+        deMorganExpression.setToolTipText(Lang.get("msg_applyDeMorgan_tt"));
+        expressionTypePanel.add(deMorganExpression);
         expressionResultsPanel.add(expressionTypePanel);
         implicantsExpression.addActionListener(event -> updateExpressionPolarity());
         implicentsExpression.addActionListener(event -> updateExpressionPolarity());
+        deMorganExpression.addActionListener(event -> calculateExpressions());
         unoptimizedExpressionText = createExpressionTextArea();
         optimizedExpressionText = createExpressionTextArea();
         unoptimizedExpressionRow = createExpressionRow(Lang.get("msg_unoptimizedExpression"), unoptimizedExpressionText);
@@ -663,6 +688,10 @@ public class TableDialog extends JDialog {
         useSwitchesAndLeds = new JCheckBoxMenuItem(Lang.get("msg_builder_useSwitchesAndLeds"));
         useSwitchesAndLeds.setToolTipText(Lang.get("msg_builder_useSwitchesAndLeds_tt"));
         createMenu.add(useSwitchesAndLeds);
+        useOptimizedExpressions = new JCheckBoxMenuItem(Lang.get("msg_simplifyExpression"));
+        useOptimizedExpressions.setToolTipText(Lang.get("msg_simplifyExpression_tt"));
+        useOptimizedExpressions.setSelected(true);
+        createMenu.add(useOptimizedExpressions);
         createMenu.addSeparator();
 
         createMenu.add(new ToolTipAction(Lang.get("menu_table_createCircuit")) {
@@ -761,7 +790,8 @@ public class TableDialog extends JDialog {
             return;
         }
         try {
-            ArrayList<Expression> expressions = new de.neemann.digital.analyse.parser.Parser(source).parse();
+            ArrayList<Expression> expressions =
+                    new de.neemann.digital.analyse.parser.Parser(source, true).parse();
             TruthTable originalTable = ExpressionToTruthTable.create(expressions, false);
             TruthTable simplifiedTable = ExpressionToTruthTable.create(expressions, true);
             setExpressionTableViews(originalTable, simplifiedTable);
@@ -819,17 +849,15 @@ public class TableDialog extends JDialog {
         if (originalExpressionTable == null || simplifiedExpressionTable == null
                 || showSimplified == showingSimplifiedExpressionTable)
             return;
-
-        if (showingSimplifiedExpressionTable)
-            simplifiedExpressionTable = undoManager.getActual().createDeepCopy();
-        else
-            originalExpressionTable = undoManager.getActual().createDeepCopy();
-
         showingSimplifiedExpressionTable = showSimplified;
         TruthTable selected = showSimplified ? simplifiedExpressionTable : originalExpressionTable;
-        undoManager.setInitial(selected.createDeepCopy());
         model.setOriginal(null);
-        tableChangedPreservingExpressionViews();
+        preservingExpressionTableViews = true;
+        try {
+            model.setDisplayedTable(selected);
+        } finally {
+            preservingExpressionTableViews = false;
+        }
     }
 
     private void tableChangedPreservingExpressionViews() {
@@ -876,20 +904,16 @@ public class TableDialog extends JDialog {
     private void createCircuit(boolean useJKff, boolean useLUTs, boolean use74xx, ExpressionModifier... modifier) {
         try {
             TruthTable actualTable = undoManager.getActual();
-            TruthTable circuitTable = simplifiedExpressionTable == null
-                    ? actualTable
-                    : simplifiedExpressionTable;
-            ExpressionListenerStore circuitExpressions = lastGeneratedExpressions;
-            if (circuitTable != actualTable) {
-                circuitExpressions = new ExpressionListenerStore(null);
-                new ExpressionCreator(circuitTable).create(circuitExpressions);
-            }
+            ExpressionListenerStore circuitExpressions =
+                    createExpressionsForCreation(actualTable, deMorganExpression.isSelected() && !use74xx);
 
-            final ModelAnalyserInfo modelAnalyzerInfo = circuitTable.getModelAnalyzerInfo();
-            CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, circuitTable.getVars())
+            final ModelAnalyserInfo modelAnalyzerInfo = actualTable.getModelAnalyzerInfo();
+            CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, actualTable.getVars())
                     .setUseJK(useJKff)
                     .setUseLUTs(useLUTs)
                     .setUse74xx(use74xx)
+                    .setResolveLocalVars(deMorganExpression.isSelected())
+                    .setPreserveSharedOutputPins(deMorganExpression.isSelected())
                     .setUseSwitchesAndLeds(useSwitchesAndLeds != null && useSwitchesAndLeds.isSelected())
                     .setModelAnalyzerInfo(modelAnalyzerInfo);
             new BuilderExpressionCreator(circuitBuilder, modifier)
@@ -966,12 +990,14 @@ public class TableDialog extends JDialog {
         boolean preserveExpressionTableViews = preservingExpressionTableViews;
         try {
             LOGGER.info("start optimization");
+            final TruthTable table = undoManager.getActual();
             ExpressionListener expressionListener = new OutputExpressionListener(generation);
 
             if (createJK.isSelected())
                 expressionListener = new ExpressionListenerJK(expressionListener);
+            if (deMorganExpression.isSelected())
+                expressionListener = new DeMorganExpressionListener(expressionListener, table);
 
-            final TruthTable table = undoManager.getActual();
             lastGeneratedExpressions = null;
             if (implicentsExpression.isSelected())
                 setUnoptimizedExpressions(table, true);
@@ -1063,6 +1089,115 @@ public class TableDialog extends JDialog {
         return inverted;
     }
 
+    private ExpressionListenerStore createExpressionsForCreation(TruthTable sourceTable, boolean factorOutputs)
+            throws AnalyseException, ExpressionException, FormatterException {
+        boolean useZeros = implicentsExpression.isSelected();
+        boolean useOptimized = useOptimizedExpressions == null || useOptimizedExpressions.isSelected();
+        ExpressionListenerStore expressions = new ExpressionListenerStore(null);
+
+        if (!useOptimized) {
+            TruthTable expressionTable = useZeros ? createInvertedTable(sourceTable) : sourceTable;
+            for (int i = 0; i < sourceTable.getResultCount(); i++) {
+                Expression expression = ExpressionCreator.createUnoptimizedExpression(
+                        sourceTable.getVars(), expressionTable.getResult(i));
+                if (useZeros)
+                    expression = Not.not(expression);
+                expressions.resultFound(sourceTable.getResultName(i), expression);
+            }
+        } else {
+            TruthTable optimizedTable = useZeros ? createInvertedTable(sourceTable) : sourceTable;
+            ExpressionListenerStore optimized = new ExpressionListenerStore(null);
+            new ExpressionCreator(optimizedTable).create(optimized);
+            for (ExpressionListenerStore.Result result : optimized.getResults()) {
+                int resultIndex = getResultIndex(sourceTable, result.getName());
+                if (resultIndex < 0)
+                    continue;
+                Expression expression = result.getExpression().copy();
+                if (deMorganExpression.isSelected())
+                    expression = applyDeMorgan(expression, sourceTable.getVars(),
+                            sourceTable.getResult(resultIndex));
+                if (useZeros)
+                    expression = Not.not(expression);
+                expressions.resultFound(sourceTable.getResultName(resultIndex), expression);
+            }
+        }
+        expressions.close();
+        if (factorOutputs)
+            return factorXorOutputs(expressions);
+        return expressions;
+    }
+
+    private ExpressionListenerStore factorXorOutputs(ExpressionListenerStore expressions)
+            throws ExpressionException, FormatterException {
+        List<ExpressionListenerStore.Result> results = expressions.getResults();
+        Map<String, String> exactOutput = new HashMap<>();
+        Map<String, Set<String>> parityVariables = new HashMap<>();
+
+        for (ExpressionListenerStore.Result result : results) {
+            Set<String> variables = collectXorVariables(result.getExpression());
+            if (!variables.isEmpty()) {
+                List<String> ordered = new ArrayList<>(variables);
+                ordered.sort(String::compareTo);
+                String key = "X:" + ordered;
+                exactOutput.putIfAbsent(key, result.getName());
+                parityVariables.put(result.getName(), variables);
+            }
+        }
+
+        ExpressionListenerStore factored = new ExpressionListenerStore(null);
+        for (ExpressionListenerStore.Result result : results) {
+            Set<String> variables = parityVariables.get(result.getName());
+            if (variables != null) {
+                List<String> ordered = new ArrayList<>(variables);
+                ordered.sort(String::compareTo);
+                String exactKey = "X:" + ordered;
+                String firstOutput = exactOutput.get(exactKey);
+                if (!result.getName().equals(firstOutput)) {
+                    factored.resultFound(result.getName(), new Variable(firstOutput));
+                    continue;
+                }
+
+                String sharedOutput = null;
+                String remainingVariable = null;
+                for (ExpressionListenerStore.Result possible : results) {
+                    Set<String> sharedVariables = parityVariables.get(possible.getName());
+                    if (sharedVariables != null
+                            && sharedVariables.size() < variables.size()
+                            && variables.containsAll(sharedVariables)
+                            && variables.size() - sharedVariables.size() == 1) {
+                        Set<String> difference = new HashSet<>(variables);
+                        difference.removeAll(sharedVariables);
+                        sharedOutput = possible.getName();
+                        remainingVariable = difference.iterator().next();
+                        break;
+                    }
+                }
+                if (sharedOutput != null) {
+                    factored.resultFound(result.getName(),
+                            Operation.xor(new Variable(sharedOutput), new Variable(remainingVariable)));
+                    continue;
+                }
+            }
+            factored.resultFound(result.getName(), result.getExpression().copy());
+        }
+        factored.close();
+        return factored;
+    }
+
+    private static Set<String> collectXorVariables(Expression expression) {
+        Set<String> variables = new HashSet<>();
+        collectXorVariables(expression, variables);
+        return variables;
+    }
+
+    private static void collectXorVariables(Expression expression, Set<String> variables) {
+        if (expression instanceof Variable)
+            variables.add(((Variable) expression).getIdentifier());
+        else if (expression instanceof Operation.XOr)
+            for (Expression item : ((Operation.XOr) expression).getExpressions())
+                collectXorVariables(item, variables);
+    }
+
     private void updateExpressionPolarity() {
         int generation = ++expressionPolarityGeneration;
         TruthTable currentTable = undoManager.getActual();
@@ -1100,8 +1235,18 @@ public class TableDialog extends JDialog {
                         else if (!result.getName().isEmpty())
                             currentResultName = null;
                         if (currentResultName != null) {
-                            expressions.add(new NamedExpression(currentResultName,
-                                    Not.not(result.getExpression().copy())));
+                            Expression expression = Not.not(result.getExpression().copy());
+                            if (deMorganExpression.isSelected()) {
+                                try {
+                                    expression = applyDeMorgan(expression, sourceTable.getVars(),
+                                            sourceTable.getResult(getResultIndex(sourceTable, currentResultName)));
+                                } catch (ExpressionException ex) {
+                                    new ErrorMessage(Lang.get("msg_errorDuringCalculation"))
+                                            .addCause(ex).show(TableDialog.this);
+                                    return;
+                                }
+                            }
+                            expressions.add(new NamedExpression(currentResultName, expression));
                         }
                     }
                     showExpressionResults(expressions);
@@ -1201,6 +1346,28 @@ public class TableDialog extends JDialog {
 
     private String normalizeGeneratedName(String name) {
         return name.replace("^{n+1}", "^n+1");
+    }
+
+    private Expression applyDeMorgan(Expression expression) throws ExpressionException {
+        Expression transformed = ExpressionModifier.modifyExpression(expression.copy(), DeMorgan.INSTANCE);
+        transformed = QuineMcCluskey.simplify(transformed);
+        transformed = QuineMcCluskey.recognizeParity(transformed);
+        int originalComplexity = expression.traverse(new ComplexityInclNotVisitor()).getComplexity();
+        int transformedComplexity = transformed.traverse(new ComplexityInclNotVisitor()).getComplexity();
+        return transformedComplexity <= originalComplexity ? transformed : expression;
+    }
+
+    private Expression applyDeMorgan(Expression expression, List<Variable> vars,
+                                      BoolTable boolTable)
+            throws ExpressionException {
+        Expression transformed = ExpressionModifier.modifyExpression(expression.copy(), DeMorgan.INSTANCE);
+        transformed = QuineMcCluskey.simplify(transformed);
+        Expression parity = QuineMcCluskey.recognizeParity(vars, boolTable);
+        if (parity != null)
+            transformed = parity;
+        int originalComplexity = expression.traverse(new ComplexityInclNotVisitor()).getComplexity();
+        int transformedComplexity = transformed.traverse(new ComplexityInclNotVisitor()).getComplexity();
+        return transformedComplexity <= originalComplexity ? transformed : expression;
     }
 
     /**
@@ -1352,6 +1519,30 @@ public class TableDialog extends JDialog {
         }
     }
 
+    private final class DeMorganExpressionListener implements ExpressionListener {
+        private final ExpressionListener parent;
+        private final TruthTable table;
+
+        private DeMorganExpressionListener(ExpressionListener parent, TruthTable table) {
+            this.parent = parent;
+            this.table = table;
+        }
+
+        @Override
+        public void resultFound(String name, Expression expression) throws FormatterException, ExpressionException {
+            int index = getResultIndex(table, name);
+            if (index < 0)
+                parent.resultFound(name, applyDeMorgan(expression));
+            else
+                parent.resultFound(name, applyDeMorgan(expression, table.getVars(), table.getResult(index)));
+        }
+
+        @Override
+        public void close() throws FormatterException, ExpressionException {
+            parent.close();
+        }
+    }
+
     private final class OutputExpressionListener implements ExpressionListener {
         private final ArrayList<Expression> expressions;
         private final int generation;
@@ -1418,7 +1609,9 @@ public class TableDialog extends JDialog {
         @Override
         public void actionPerformed(ActionEvent e) {
             try {
-                generator.generate(TableDialog.this, filename, undoManager.getActual(), lastGeneratedExpressions);
+                TruthTable actualTable = undoManager.getActual();
+                generator.generate(TableDialog.this, filename, actualTable,
+                        createExpressionsForCreation(actualTable, false));
                 setLastUsedGenerator(generator);
             } catch (Exception e1) {
                 new ErrorMessage(Lang.get("msg_errorDuringHardwareExport")).addCause(e1).show(TableDialog.this);

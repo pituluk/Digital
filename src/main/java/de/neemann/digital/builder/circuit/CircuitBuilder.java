@@ -57,6 +57,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private final ArrayList<Variable> desiredVarOrdering;
     private final HashSet<String> varsToNet;
     private final HashSet<String> localVarsUsed;
+    private final HashMap<String, FragmentVisualElement> sharedOutputFragments;
     private int pos;
     private boolean useLUT;
     private boolean useJKff;
@@ -69,6 +70,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private boolean resolveLocalVars;
     private boolean wideShapes;
     private boolean useSwitchesAndLeds;
+    private boolean preserveSharedOutputPins;
 
 
     /**
@@ -101,6 +103,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         sequentialVars = new ArrayList<>();
         varsToNet = new HashSet<>();
         localVarsUsed = new HashSet<>();
+        sharedOutputFragments = new HashMap<>();
         wideShapes = Settings.getInstance().get(Keys.SETTINGS_IEEE_SHAPES);
     }
 
@@ -112,6 +115,17 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
      */
     public CircuitBuilder setResolveLocalVars(boolean resolveLocalVars) {
         this.resolveLocalVars = resolveLocalVars;
+        return this;
+    }
+
+    /**
+     * Preserves output pins when local variables are shared between outputs.
+     *
+     * @param preserveSharedOutputPins true to add output pins to shared net outputs
+     * @return this for chained calls
+     */
+    public CircuitBuilder setPreserveSharedOutputPins(boolean preserveSharedOutputPins) {
+        this.preserveSharedOutputPins = preserveSharedOutputPins;
         return this;
     }
 
@@ -360,6 +374,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
                 return false;
         return true;
     }
+
     private Fragment createBasicFragment(Expression expression) throws BuilderException {
         if (expression instanceof Operation) {
             Operation op = (Operation) expression;
@@ -374,20 +389,22 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
                     return new FragmentVisualElement(Const.DESCRIPTION, shapeFactory).setAttr(Keys.VALUE, 0L);
             }
             ArrayList<Fragment> frags = getOperationFragments(op);
+            Fragment fragment;
             if (op instanceof Operation.And)
-                return new FragmentExpression(frags,
+                fragment = new FragmentExpression(frags,
                         new FragmentVisualElement(And.DESCRIPTION, frags.size(), shapeFactory)
                                 .setAttr(Keys.WIDE_SHAPE, wideShapes));
             else if (op instanceof Operation.Or)
-                return new FragmentExpression(frags,
+                fragment = new FragmentExpression(frags,
                         new FragmentVisualElement(Or.DESCRIPTION, frags.size(), shapeFactory)
                                 .setAttr(Keys.WIDE_SHAPE, wideShapes));
             else if (op instanceof Operation.XOr)
-                return new FragmentExpression(frags,
+                fragment = new FragmentExpression(frags,
                         new FragmentVisualElement(XOr.DESCRIPTION, frags.size(), shapeFactory)
                                 .setAttr(Keys.WIDE_SHAPE, wideShapes));
             else
                 throw new BuilderException(Lang.get("err_builder_operationNotSupported", op.getClass().getSimpleName()));
+            return fragment;
         } else if (expression instanceof Not) {
             Not n = (Not) expression;
             if (isVar(n.getExpression())) {
@@ -406,11 +423,14 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
                                 .setAttr(Keys.WIDE_SHAPE, wideShapes));
             } else if (n.getExpression() instanceof Operation.XOr) {
                 ArrayList<Fragment> frags = getOperationFragments((Operation) n.getExpression());
-                return new FragmentExpression(frags,
+                Fragment fragment = new FragmentExpression(frags,
                         new FragmentVisualElement(XNOr.DESCRIPTION, frags.size(), shapeFactory)
                                 .setAttr(Keys.WIDE_SHAPE, wideShapes));
+                return fragment;
             }
-            return new FragmentExpression(createBasicFragment(n.getExpression()), new FragmentVisualElement(de.neemann.digital.core.basic.Not.DESCRIPTION, shapeFactory));
+            Fragment fragment = new FragmentExpression(createBasicFragment(n.getExpression()),
+                    new FragmentVisualElement(de.neemann.digital.core.basic.Not.DESCRIPTION, shapeFactory));
+            return fragment;
         } else if (isVar(expression)) {
             FragmentVariable fragmentVariable = new FragmentVariable((Variable) expression, false);
             fragmentVariables.add(fragmentVariable);
@@ -565,6 +585,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         // add fragments to circuit
         for (Fragment f : fragments)
             addFragmentToCircuit(f, circuit);
+        addSharedOutputPins(circuit);
 
         // order bus variables
         Collection<Variable> variables = variableVisitor.getVariables();
@@ -597,8 +618,30 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private void resolveLocalVars() {
         for (String lv : localVarsUsed) {
             varsToNet.add(lv);
-            FragmentVisualElement frag = combinatorialOutputs.get(lv);
-            frag.traverse(new ReplaceOutputByTunnel(lv, shapeFactory));
+            FragmentVisualElement output = combinatorialOutputs.get(lv);
+            if (output != null) {
+                if (preserveSharedOutputPins) {
+                    output.traverse(new ReplaceOutputByTunnel(lv, shapeFactory));
+                    sharedOutputFragments.put(lv, output);
+                } else {
+                    output.traverse(new ReplaceOutputByTunnel(lv, shapeFactory));
+                }
+            }
+        }
+    }
+
+    private void addSharedOutputPins(Circuit circuit) {
+        for (HashMap.Entry<String, FragmentVisualElement> entry : sharedOutputFragments.entrySet()) {
+            VisualElement tunnel = entry.getValue().getVisualElement();
+            Vector tunnelPosition = tunnel.getPos();
+            Vector outPosition = new Vector(tunnelPosition.x + SIZE, tunnelPosition.y);
+            VisualElement out = new VisualElement(Out.DESCRIPTION.getName())
+                    .setShapeFactory(shapeFactory)
+                    .setPos(outPosition);
+            out.getElementAttributes().set(Keys.LABEL, entry.getKey());
+            checkPinNumber(out);
+            circuit.add(out);
+            circuit.add(new Wire(tunnelPosition, outPosition));
         }
     }
 

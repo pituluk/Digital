@@ -28,6 +28,7 @@ public class TruthTableTableModel implements TableModel {
     private final ArrayList<TableModelListener> listeners = new ArrayList<>();
     private final UndoManager<TruthTable> undoManager;
     private TruthTable original;
+    private TruthTable displayedTable;
 
     /**
      * Creates a new instance
@@ -40,17 +41,17 @@ public class TruthTableTableModel implements TableModel {
 
     @Override
     public int getRowCount() {
-        return undoManager.getActual().getRows();
+        return getTableForView().getRows();
     }
 
     @Override
     public int getColumnCount() {
-        return undoManager.getActual().getCols();
+        return getTableForView().getCols();
     }
 
     @Override
     public String getColumnName(int columnIndex) {
-        return undoManager.getActual().getColumnName(columnIndex);
+        return getTableForView().getColumnName(columnIndex);
     }
 
     @Override
@@ -65,7 +66,7 @@ public class TruthTableTableModel implements TableModel {
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-        int bit = undoManager.getActual().getValue(rowIndex, columnIndex);
+        int bit = getTableForView().getValue(rowIndex, columnIndex);
         if (original != null) {
             int b = original.getValue(rowIndex, columnIndex);
             return new BitModified(bit, b != bit);
@@ -92,11 +93,26 @@ public class TruthTableTableModel implements TableModel {
         if (actVal != val) {
             try {
                 undoManager.apply(truthTable -> truthTable.setValue(rowIndex, columnIndex, val));
+                displayedTable = null;
             } catch (ModifyException e) {
                 e.printStackTrace();
             }
             fireModelEvent(rowIndex);
         }
+    }
+
+    private TruthTable getTableForView() {
+        return displayedTable != null ? displayedTable : undoManager.getActual();
+    }
+
+    /**
+     * Shows a different table without changing the truth table held by the undo manager.
+     *
+     * @param truthTable the table to display
+     */
+    public void setDisplayedTable(TruthTable truthTable) {
+        displayedTable = truthTable == null ? null : truthTable.createDeepCopy();
+        fireTableChanged();
     }
 
     private void fireModelEvent(int rowIndex) {

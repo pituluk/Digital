@@ -21,6 +21,7 @@ import static de.neemann.digital.analyse.parser.Tokenizer.Token.*;
 public class Parser {
 
     private final Tokenizer tokenizer;
+    private final boolean directAssignments;
 
     /**
      * Creates a new instance
@@ -32,12 +33,33 @@ public class Parser {
     }
 
     /**
+     * Creates a parser which may interpret direct assignments as named expressions.
+     *
+     * @param expression expression text
+     * @param directAssignments true to recognize direct assignments such as U=A+B
+     */
+    public Parser(String expression, boolean directAssignments) {
+        this(new StringReader(expression), directAssignments);
+    }
+
+    /**
      * Creates a new instance
      *
      * @param reader the reader to read the expression
      */
     public Parser(Reader reader) {
+        this(reader, false);
+    }
+
+    /**
+     * Creates a parser for the given reader.
+     *
+     * @param reader reader
+     * @param directAssignments true to recognize direct assignments
+     */
+    public Parser(Reader reader, boolean directAssignments) {
         tokenizer = new Tokenizer(reader);
+        this.directAssignments = directAssignments;
     }
 
     /**
@@ -50,15 +72,15 @@ public class Parser {
     public ArrayList<Expression> parse() throws IOException, ParseException {
         ArrayList<Expression> list = new ArrayList<>();
         while (true) {
+            while (tokenizer.peek() == COMMA)
+                tokenizer.consume();
+            if (tokenizer.peek() == EOF)
+                return list;
             list.add(parseLet());
-            switch (tokenizer.next()) {
-                case EOF:
-                    return list;
-                case COMMA:
-                    break;
-                default:
-                    throw new ParseException(Lang.get("err_parserUnexpectedToken_N", tokenizer.toString()));
-            }
+            if (tokenizer.peek() == EOF)
+                return list;
+            if (tokenizer.peek() != COMMA)
+                throw new ParseException(Lang.get("err_parserUnexpectedToken_N", tokenizer.toString()));
         }
     }
 
@@ -69,8 +91,62 @@ public class Parser {
             String name = tokenizer.getIdent();
             consume(EQUAL);
             return new NamedExpression(name, parseOr());
-        } else
-            return parseOr();
+        }
+        if (tokenizer.peek() == IDENT) {
+            tokenizer.consume();
+            String name = tokenizer.getIdent();
+            if (tokenizer.peek() == EQUAL) {
+                if (!directAssignments || isSimpleVariableName(name))
+                    return parseOrStarting(new Variable(name));
+                tokenizer.consume();
+                Expression right = parseOr();
+                return new NamedExpression(name, right);
+            }
+            return parseOrStarting(new Variable(name));
+        }
+        return parseOr();
+    }
+
+    private boolean isSimpleVariableName(String name) {
+        return name.length() == 1 && "ABCabc".indexOf(name.charAt(0)) >= 0;
+    }
+
+    private Expression parseOrStarting(Expression ex) throws IOException, ParseException {
+        ex = parseAndStarting(ex);
+        while (tokenizer.peek() == OR || tokenizer.peek() == XOR) {
+            if (tokenizer.next() == OR)
+                ex = Operation.or(ex, parseAnd());
+            else
+                ex = Operation.xor(ex, parseAnd());
+        }
+        return ex;
+    }
+
+    private Expression parseAndStarting(Expression ex) throws IOException, ParseException {
+        ex = parseEqualStarting(ex);
+        while (true) {
+            if (tokenizer.peek() == AND) {
+                tokenizer.consume();
+                ex = Operation.and(ex, parseEqual());
+            } else if (isSimpleEx(tokenizer.peek())) {
+                ex = Operation.and(ex, parseEqual());
+            } else
+                return ex;
+        }
+    }
+
+    private Expression parseEqualStarting(Expression ex) throws IOException, ParseException {
+        while (tokenizer.peek() == EQUAL || tokenizer.peek() == NOTEQUAL) {
+            Tokenizer.Token tok = tokenizer.next();
+            ex = Operation.xor(ex, parseSimpleExp());
+            if (tok == EQUAL)
+                ex = Not.not(ex);
+        }
+        while (tokenizer.peek() == POSTNOT) {
+            tokenizer.consume();
+            ex = Not.not(ex);
+        }
+        return ex;
     }
 
     private Expression parseOr() throws IOException, ParseException {

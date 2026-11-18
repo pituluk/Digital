@@ -1983,8 +1983,6 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="menu_view">Ansicht</string>
     <string name="menu_zoomIn">Vergrößern</string>
     <string name="menu_zoomOut">Verkleinern</string>
-    <string name="menu_expression">Ausdruck</string>
-    <string name="menu_expression_tt">Erzeugt eine Schaltung aus einem Ausdruck.</string>
     <string name="menu_runTests">Tests ausführen</string>
     <string name="menu_runTests_tt">Führt alle Tests in der Schaltung aus!</string>
     <string name="menu_actualToDefault">Eingänge übernehmen</string>
@@ -2101,12 +2099,14 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="msg_restartNeeded">Die Änderung der Einstellung erfordert einen Neustart!</string>
     <string name="msg_enterAnExpression">Geben Sie einen Ausdruck ein:</string>
     <string name="msg_showSimplifiedTruthTable">Vereinfachte Wahrheitstabelle anzeigen</string>
-    <string name="msg_simplifyExpression">Ausdruck vereinfachen</string>
+    <string name="msg_simplifyExpression">Vereinfachten Ausdruck verwenden</string>
     <string name="msg_simplifyExpression_tt">Den Ausdruck vor dem Erstellen der Schaltung vereinfachen.</string>
     <string name="msg_unoptimizedExpression">Nicht optimierter Ausdruck:</string>
     <string name="msg_optimizedExpression">Optimierter Ausdruck:</string>
     <string name="msg_karnaughGroupOnes">Einsen gruppieren</string>
     <string name="msg_karnaughGroupZeros">Nullen gruppieren</string>
+    <string name="msg_applyDeMorgan">De-Morgan-Gesetze verwenden und Ausgänge zwischenspeichern</string>
+    <string name="msg_applyDeMorgan_tt">Optimierte Ausdrücke mit De-Morgan-Gesetzen vereinfachen und berechnete Teilausdrücke wiederverwenden.</string>
     <string name="msg_runningTestError">Fehler bei der Ausführung der Tests:</string>
     <string name="msg_testResult">Testergebnis</string>
     <string name="msg_test_N_Passed">{0}: ok</string>
@@ -2316,9 +2316,11 @@ Stellen Sie sicher, dass der Flash-Vorgang abgeschlossen ist, bevor Sie diesen D
         Nicht: "!", "~", "¬"<br/>
         </p>
         <p>UND hat Vorrang vor ODER bzw. Exkl. ODER.
-        Mehrere Ausdrücke können durch "," oder ";" getrennt werden.
-        Sollen die Ausdrücke benannt werden, kann die let-Anweisung verwendet
-        werden: "let U=A+B, let V=A*B"</p></html>]]>
+        Mehrere Ausdrücke können durch "," oder ";" sowie durch eine neue Zeile
+        getrennt werden. Ausdrücke können mit "let U=A+B" oder direkt durch
+        eine Zuweisung benannt werden: "U=A+B". Mehrere benannte Ausgänge können
+        zeilenweise angegeben werden:
+        "P1=A*B\nP2=!A+B".</p></html>]]>
     </string>
     <string name="msg_testVectorHelpTitle">Testvektoren</string>
     <string name="msg_testVectorHelp"><![CDATA[<html>

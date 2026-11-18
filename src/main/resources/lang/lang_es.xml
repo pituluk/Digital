@@ -1345,8 +1345,6 @@ In the file howTo.md you can find more details about translations.
   <string name="menu_view">Ver</string>
   <string name="menu_zoomIn">Zoom adentro</string>
   <string name="menu_zoomOut">Zoom afuera</string>
-  <string name="menu_expression">Expresión</string>
-  <string name="menu_expression_tt">Crea un circuito a partir de una expresión.</string>
   <string name="menu_runTests">Ejecuta las pruebas</string>
   <string name="menu_runTests_tt">Ejecuta todos los valores de prueba en el circuito</string>
   <string name="menu_actualToDefault">Fijar valores de entrada por defecto.</string>
