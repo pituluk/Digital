@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016 Helmut Neemann
+ * Copyright (c) 2016 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -26,6 +27,7 @@ public class QuineMcCluskey {
     private final List<Variable> variables;
     private final ArrayList<TableRow> primes;
     private TableRows rows;
+    private boolean hazardFree;
 
     /**
      * Creates a new instance
@@ -341,11 +343,32 @@ public class QuineMcCluskey {
     }
 
     /**
+     * Sets whether to use hazard-free minimization (complete sum, retaining all prime implicants).
+     *
+     * @param hazardFree true for hazard-free minimization
+     * @return this for chained calls
+     */
+    public QuineMcCluskey setHazardFree(boolean hazardFree) {
+        this.hazardFree = hazardFree;
+        return this;
+    }
+
+    /**
+     * @return true if hazard-free minimization is enabled
+     */
+    public boolean isHazardFree() {
+        return hazardFree;
+    }
+
+    /**
      * Simplify the primes
      *
      * @param primeSelector the prime selector to use
      */
     public void simplifyPrimes(PrimeSelector primeSelector) {
+        if (hazardFree) {
+            return;
+        }
 
         TreeSet<Integer> columns = new TreeSet<>();
         for (TableRow r : primes)

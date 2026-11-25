@@ -1,14 +1,17 @@
 /*
- * Copyright (c) 2016 Helmut Neemann
+ * Copyright (c) 2016 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
 package de.neemann.digital.builder.circuit;
 
+import de.neemann.digital.analyse.AsynchronousLatchAnalyzer;
 import de.neemann.digital.analyse.DetermineJKStateMachine;
 import de.neemann.digital.analyse.ModelAnalyserInfo;
 import de.neemann.digital.analyse.expression.*;
 import de.neemann.digital.analyse.expression.Not;
+import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
 import de.neemann.digital.builder.BuilderException;
 import de.neemann.digital.builder.BuilderInterface;
 import de.neemann.digital.core.basic.*;
@@ -16,6 +19,7 @@ import de.neemann.digital.core.element.Keys;
 import de.neemann.digital.core.element.Rotation;
 import de.neemann.digital.core.flipflops.FlipflopD;
 import de.neemann.digital.core.flipflops.FlipflopJK;
+import de.neemann.digital.core.flipflops.FlipflopRSAsync;
 import de.neemann.digital.core.io.Const;
 import de.neemann.digital.core.io.DipSwitch;
 import de.neemann.digital.core.io.In;
@@ -23,6 +27,7 @@ import de.neemann.digital.core.io.Out;
 import de.neemann.digital.core.io.Probe;
 import de.neemann.digital.core.memory.DataField;
 import de.neemann.digital.core.memory.LookUpTable;
+import de.neemann.digital.core.wiring.AsyncSeq;
 import de.neemann.digital.core.wiring.Clock;
 import de.neemann.digital.core.wiring.Splitter;
 import de.neemann.digital.draw.elements.Circuit;
@@ -52,6 +57,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private final ArrayList<Fragment> seqFragments;
     private final ArrayList<Fragment> combFragments;
     private final HashMap<String, FragmentVisualElement> combinatorialOutputs;
+    private final LinkedHashMap<String, Expression> combinatorialExpressions;
     private final ArrayList<Variable> sequentialVars;
     private final ArrayList<FragmentVisualElement> flipflops;
     private final ArrayList<Variable> desiredVarOrdering;
@@ -63,6 +69,26 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private boolean useJKff;
     private boolean useDWithConst;
     private boolean use74xx;
+    /**
+     * Synthesis mode for sequential circuits
+     */
+    public enum AsyncMode {
+        /**
+         * Standard synchronous circuit with Clock and D or JK flip-flops
+         */
+        NONE,
+        /**
+         * Asynchronous circuit using direct feedback loops and AsyncSeq element
+         */
+        FEEDBACK,
+        /**
+         * Asynchronous circuit using unclocked RS latches (FlipflopRSAsync)
+         */
+        RS_LATCH
+    }
+
+    private AsyncMode asyncMode = AsyncMode.NONE;
+    private boolean hazardFree;
     private final LinkedHashMap<String, Expression> combinatorialExpressions74xx = new LinkedHashMap<>();
     private final LinkedHashMap<String, Expression> sequentialExpressions74xx = new LinkedHashMap<>();
     private ModelAnalyserInfo mai;
@@ -100,6 +126,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         combFragments = new ArrayList<>();
         flipflops = new ArrayList<>();
         combinatorialOutputs = new HashMap<>();
+        combinatorialExpressions = new LinkedHashMap<>();
         sequentialVars = new ArrayList<>();
         varsToNet = new HashSet<>();
         localVarsUsed = new HashSet<>();
@@ -138,6 +165,24 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     public CircuitBuilder setUseJK(boolean useJKff) {
         this.useJKff = useJKff;
         return this;
+    }
+
+    /**
+     * Sets the asynchronous synthesis mode
+     *
+     * @param asyncMode the mode
+     * @return this for chained calls
+     */
+    public CircuitBuilder setAsyncMode(AsyncMode asyncMode) {
+        this.asyncMode = asyncMode;
+        return this;
+    }
+
+    /**
+     * @return the asynchronous synthesis mode
+     */
+    public AsyncMode getAsyncMode() {
+        return asyncMode;
     }
 
     /**
@@ -212,6 +257,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         checkForLocalVars(expression);
 
         combinatorialOutputs.put(name, frag);
+        combinatorialExpressions.put(name, expression);
 
         combFragments.add(new FragmentExpression(fr, frag));
         expression.traverse(variableVisitor);
@@ -235,6 +281,53 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
      * @return this for chained calls
      * @throws BuilderException BuilderException
      */
+    /**
+     * Sets whether to use hazard-free minimization (complete sum).
+     *
+     * @param hazardFree true for hazard-free minimization
+     * @return this for chained calls
+     */
+    public CircuitBuilder setHazardFree(boolean hazardFree) {
+        this.hazardFree = hazardFree;
+        return this;
+    }
+
+    /**
+     * @return true if hazard-free minimization is active
+     */
+    public boolean isHazardFree() {
+        return hazardFree;
+    }
+
+    /**
+     * Directly adds an asynchronous RS latch with explicit S and R excitation expressions.
+     *
+     * @param name  name of the latch variable
+     * @param exprS S excitation expression
+     * @param exprR R excitation expression
+     * @return this for chained calls
+     * @throws BuilderException BuilderException
+     */
+    public CircuitBuilder addAsyncRSLatch(String name, Expression exprS, Expression exprR) throws BuilderException {
+        long initValue = 0;
+        if (mai != null)
+            initValue = mai.getSequentialInitValue(name);
+
+        Fragment frS = createFragment(exprS);
+        Fragment frR = createFragment(exprR);
+        FragmentVisualElement ff = new FragmentVisualElement(FlipflopRSAsync.DESCRIPTION, shapeFactory)
+                .setAttr(Keys.LABEL, name)
+                .setAttr(Keys.DEFAULT, initValue);
+        Fragment fe = new FragmentExpression(ff, new FragmentVisualElement(Tunnel.DESCRIPTION, shapeFactory).setAttr(Keys.NETNAME, name));
+        seqFragments.add(new FragmentExpression(Arrays.asList(frS, frR), fe));
+        checkForLocalVars(exprS);
+        checkForLocalVars(exprR);
+        exprS.traverse(variableVisitor);
+        exprR.traverse(variableVisitor);
+        sequentialVars.add(new Variable(name));
+        return this;
+    }
+
     @Override
     public CircuitBuilder addSequential(String name, Expression expression) throws BuilderException {
         if (use74xx) {
@@ -244,10 +337,48 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
             return this;
         }
 
-        boolean useDff = true;
+        if (asyncMode == AsyncMode.FEEDBACK) {
+            Fragment fr = createFragment(expression);
+            Fragment fe = new FragmentVisualElement(Tunnel.DESCRIPTION, shapeFactory).setAttr(Keys.NETNAME, name);
+            seqFragments.add(new FragmentExpression(fr, fe));
+            checkForLocalVars(expression);
+            expression.traverse(variableVisitor);
+            sequentialVars.add(new Variable(name));
+            return this;
+        }
+
         long initValue = 0;
         if (mai != null)
             initValue = mai.getSequentialInitValue(name);
+
+        if (asyncMode == AsyncMode.RS_LATCH) {
+            Expression exprS = AsynchronousLatchAnalyzer.substitute(expression, name, Constant.ZERO);
+            Expression f1 = AsynchronousLatchAnalyzer.substitute(expression, name, Constant.ONE);
+            if (name.endsWith("^n")) {
+                String base = name.substring(0, name.length() - 2);
+                exprS = AsynchronousLatchAnalyzer.substitute(exprS, base, Constant.ZERO);
+                f1 = AsynchronousLatchAnalyzer.substitute(f1, base, Constant.ONE);
+            } else {
+                exprS = AsynchronousLatchAnalyzer.substitute(exprS, name + "^n", Constant.ZERO);
+                f1 = AsynchronousLatchAnalyzer.substitute(f1, name + "^n", Constant.ONE);
+            }
+            Expression exprR = Not.not(f1);
+
+            try {
+                if (hazardFree) {
+                    exprS = new QuineMcCluskey(exprS).setHazardFree(true).simplify().getExpression();
+                    exprR = new QuineMcCluskey(exprR).setHazardFree(true).simplify().getExpression();
+                } else {
+                    exprS = QuineMcCluskey.simplify(exprS);
+                    exprR = QuineMcCluskey.simplify(exprR);
+                }
+            } catch (ExpressionException ignored) {
+            }
+
+            return addAsyncRSLatch(name, exprS, exprR);
+        }
+
+        boolean useDff = true;
 
         if (useJKff) {
             try {
@@ -603,6 +734,16 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         if (!flipflops.isEmpty())
             addClockToFlipFlops(circuit);
 
+        if (asyncMode != AsyncMode.NONE && !sequentialVars.isEmpty()) {
+            VisualElement asyncSeq = new VisualElement(AsyncSeq.DESCRIPTION.getName())
+                    .setShapeFactory(shapeFactory)
+                    .setPos(new Vector(0, -SIZE * 3));
+            asyncSeq.getElementAttributes()
+                    .set(Keys.FREQUENCY, 1000)
+                    .set(Keys.RUN_AT_REAL_TIME, true);
+            circuit.add(asyncSeq);
+        }
+
         if (combinatorialOutputs.isEmpty())
             outSplitterY = addNetConnections(circuit, maxWidth + SIZE * 17, outSplitterY);
 
@@ -616,6 +757,15 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     }
 
     private void resolveLocalVars() {
+        for (Expression expr : combinatorialExpressions.values()) {
+            VariableVisitor vv = new VariableVisitor();
+            expr.traverse(vv);
+            for (Variable usedVar : vv.getVariables()) {
+                if (combinatorialOutputs.containsKey(usedVar.getIdentifier())) {
+                    localVarsUsed.add(usedVar.getIdentifier());
+                }
+            }
+        }
         for (String lv : localVarsUsed) {
             varsToNet.add(lv);
             FragmentVisualElement output = combinatorialOutputs.get(lv);
@@ -879,9 +1029,12 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private void checkPinNumber(VisualElement pin) {
         if (mai != null) {
             String name = pin.getElementAttributes().getLabel();
-            String num = mai.getPins().get(name);
-            if (num != null && num.length() > 0) {
-                pin.getElementAttributes().set(Keys.PINNUMBER, num);
+            TreeMap<String, String> pins = mai.getPins();
+            if (pins != null) {
+                String num = pins.get(name);
+                if (num != null && num.length() > 0) {
+                    pin.getElementAttributes().set(Keys.PINNUMBER, num);
+                }
             }
         }
     }

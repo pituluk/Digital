@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016 Helmut Neemann
+ * Copyright (c) 2016 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -15,15 +16,22 @@ import de.neemann.digital.analyse.expression.NamedExpression;
 import de.neemann.digital.analyse.expression.Variable;
 import de.neemann.digital.analyse.parser.ParseException;
 import de.neemann.digital.analyse.parser.Parser;
+import de.neemann.digital.analyse.expression.modify.NOr;
 import de.neemann.digital.builder.BuilderException;
+import de.neemann.digital.core.Model;
 import de.neemann.digital.core.NodeException;
+import de.neemann.digital.core.ObservableValue;
+import de.neemann.digital.core.Signal;
 import de.neemann.digital.core.element.Keys;
 import de.neemann.digital.core.flipflops.FlipflopD;
+import de.neemann.digital.core.flipflops.FlipflopRSAsync;
 import de.neemann.digital.core.io.Const;
 import de.neemann.digital.core.io.In;
 import de.neemann.digital.core.io.Out;
 import de.neemann.digital.core.basic.XOr;
 import de.neemann.digital.core.memory.LookUpTable;
+import de.neemann.digital.core.wiring.AsyncSeq;
+import de.neemann.digital.core.wiring.Clock;
 import de.neemann.digital.draw.elements.Circuit;
 import de.neemann.digital.draw.elements.Pin;
 import de.neemann.digital.draw.elements.PinException;
@@ -33,6 +41,7 @@ import de.neemann.digital.draw.elements.Wire;
 import de.neemann.digital.draw.library.ElementLibrary;
 import de.neemann.digital.draw.library.ElementNotFoundException;
 import de.neemann.digital.draw.model.ModelCreator;
+import de.neemann.digital.draw.model.ModelEntry;
 import de.neemann.digital.draw.shapes.ShapeFactory;
 import de.neemann.digital.gui.components.table.BuilderExpressionCreator;
 import de.neemann.digital.gui.components.table.ExpressionCreator;
@@ -733,4 +742,160 @@ public class CircuitBuilderTest extends TestCase {
         }
     }
 
+    public void testAsyncFeedback() throws Exception {
+        Variable y0 = new Variable("y_0");
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setAsyncMode(CircuitBuilder.AsyncMode.FEEDBACK)
+                .addSequential("y_0", not(y0))
+                .createCircuit();
+
+        // Check that clock is NOT present
+        assertEquals(0, circuit.getElements(v -> v.equalsDescription(Clock.DESCRIPTION)).size());
+        // Check that AsyncSeq is present
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(AsyncSeq.DESCRIPTION)).size());
+    }
+
+    public void testAsyncRSLatch() throws Exception {
+        Variable y0 = new Variable("y_0");
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setAsyncMode(CircuitBuilder.AsyncMode.RS_LATCH)
+                .addSequential("y_0", not(y0))
+                .createCircuit();
+
+        // Check that clock is NOT present
+        assertEquals(0, circuit.getElements(v -> v.equalsDescription(Clock.DESCRIPTION)).size());
+        // Check that RS_FF_AS is present
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(FlipflopRSAsync.DESCRIPTION)).size());
+    }
+
+    public void testCrossCoupledNorLatch() throws Exception {
+        Variable r = new Variable("R");
+        Variable s = new Variable("S");
+        Variable q = new Variable("Q");
+        Variable qn = new Variable("Q_n");
+
+        ElementLibrary library = new ElementLibrary();
+        Circuit circuit = new CircuitBuilder(new ShapeFactory(library))
+                .setResolveLocalVars(true)
+                .setPreserveSharedOutputPins(true)
+                .addCombinatorial("Q", not(or(r, qn)))
+                .addCombinatorial("Q_n", not(or(s, q)))
+                .createCircuit();
+
+        // Check that exactly 2 NOR gates are present
+        assertEquals(2, circuit.getElements(v -> v.equalsDescription(de.neemann.digital.core.basic.NOr.DESCRIPTION)).size());
+        // Check that 2 In pins and 2 Out pins are present
+        assertEquals(2, circuit.getElements(v -> v.equalsDescription(In.DESCRIPTION)).size());
+        assertEquals(2, circuit.getElements(v -> v.equalsDescription(Out.DESCRIPTION)).size());
+        // Check that tunnels are used to cross-couple the outputs
+        assertTrue(circuit.getElements(v -> v.equalsDescription(Tunnel.DESCRIPTION)).size() >= 2);
+
+        // Simulate the cross-coupled NOR latch
+        ModelCreator mc = new ModelCreator(circuit, library);
+        Model model = mc.createModel(false);
+        model.init(true);
+
+        Signal.Setter setS = model.getSignalSetter("S");
+        Signal.Setter setR = model.getSignalSetter("R");
+        ObservableValue outQ = model.getOutput("Q");
+        ObservableValue outQn = model.getOutput("Q_n");
+
+        assertNotNull(setS);
+        assertNotNull(setR);
+        assertNotNull(outQ);
+        assertNotNull(outQn);
+
+        // Step 1: Set S=1, R=0 -> Q=1, Q_n=0
+        setS.set(1, 0);
+        setR.set(0, 0);
+        model.doStep();
+        assertEquals(1, outQ.getValue());
+        assertEquals(0, outQn.getValue());
+
+        // Step 2: Hold S=0, R=0 -> Q remains 1, Q_n remains 0 (latched state)
+        setS.set(0, 0);
+        setR.set(0, 0);
+        model.doStep();
+        assertEquals(1, outQ.getValue());
+        assertEquals(0, outQn.getValue());
+
+        // Step 3: Reset S=0, R=1 -> Q=0, Q_n=1
+        setS.set(0, 0);
+        setR.set(1, 0);
+        model.doStep();
+        assertEquals(0, outQ.getValue());
+        assertEquals(1, outQn.getValue());
+
+        // Step 4: Hold S=0, R=0 -> Q remains 0, Q_n remains 1 (latched state)
+        setS.set(0, 0);
+        setR.set(0, 0);
+        model.doStep();
+        assertEquals(0, outQ.getValue());
+        assertEquals(1, outQn.getValue());
+    }
+
+    public void testNorLatchSequentialFeedback() throws Exception {
+        Variable s = new Variable("S");
+        Variable r = new Variable("R");
+        Variable q = new Variable("Q_0^n");
+        ArrayList<Variable> vars = new ArrayList<>();
+        vars.add(s);
+        vars.add(r);
+        vars.add(q);
+        TruthTable tt = new TruthTable(vars);
+        BoolTableByteArray val = new BoolTableByteArray(8);
+        for (int row = 0; row < 8; row++) {
+            int sBit = (row >> 2) & 1;
+            int rBit = (row >> 1) & 1;
+            int qBit = row & 1;
+            int nextQ = sBit | ((1 - rBit) & qBit);
+            val.set(row, nextQ);
+        }
+        tt.addResult("Q_0^{n+1}", val);
+
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder cb = new CircuitBuilder(new ShapeFactory(library), vars)
+                .setAsyncMode(CircuitBuilder.AsyncMode.FEEDBACK);
+
+        // Synthesize using NOR modifier
+        ExpressionListenerStore els = new ExpressionListenerStore(null);
+        els.resultFound("Q_0^{n+1}", or(s, and(not(r), q)));
+        els.close();
+        new BuilderExpressionCreator(cb, new NOr()).create(els);
+        Circuit circuit = cb.createCircuit();
+
+        // Check that clock is NOT present
+        assertEquals(0, circuit.getElements(v -> v.equalsDescription(Clock.DESCRIPTION)).size());
+        // Check that AsyncSeq is present
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(AsyncSeq.DESCRIPTION)).size());
+        // Check that NOR gate(s) are present
+        assertTrue(circuit.getElements(v -> v.equalsDescription(de.neemann.digital.core.basic.NOr.DESCRIPTION)).size() > 0);
+    }
+
+    public void testNorLatchSequentialRSLatch() throws Exception {
+        Variable s = new Variable("S");
+        Variable r = new Variable("R");
+        Variable q = new Variable("Q_0^n");
+        ArrayList<Variable> vars = new ArrayList<>();
+        vars.add(s);
+        vars.add(r);
+        vars.add(q);
+
+        ElementLibrary library = new ElementLibrary();
+        CircuitBuilder cb = new CircuitBuilder(new ShapeFactory(library), vars)
+                .setAsyncMode(CircuitBuilder.AsyncMode.RS_LATCH);
+
+        ExpressionListenerStore els = new ExpressionListenerStore(null);
+        els.resultFound("Q_0^{n+1}", or(s, and(not(r), q)));
+        els.close();
+        new BuilderExpressionCreator(cb).create(els);
+        Circuit circuit = cb.createCircuit();
+
+        // Check that clock is NOT present
+        assertEquals(0, circuit.getElements(v -> v.equalsDescription(Clock.DESCRIPTION)).size());
+        // Check that FlipflopRSAsync (unclocked RS latch) is present
+        assertEquals(1, circuit.getElements(v -> v.equalsDescription(FlipflopRSAsync.DESCRIPTION)).size());
+    }
 }

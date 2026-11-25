@@ -1916,6 +1916,10 @@
     <string name="menu_table_createNOr_tt">Creates a circuit which reproduces the truth table only with NOr gates.</string>
     <string name="menu_table_createCircuit74xx">Circuit with 74xx DIL chips</string>
     <string name="menu_table_createCircuit74xx_tt">Creates a circuit which reproduces the truth table. Uses 74xx DIL chips and packs gates by chip family when possible.</string>
+    <string name="menu_table_createCircuitAsyncFeedback">Circuit (asynchronous - feedback)</string>
+    <string name="menu_table_createCircuitAsyncFeedback_tt">Creates an asynchronous sequential circuit using feedback loops.</string>
+    <string name="menu_table_createCircuitAsyncRS">Circuit (asynchronous - RS latches)</string>
+    <string name="menu_table_createCircuitAsyncRS_tt">Creates an asynchronous sequential circuit using unclocked RS flip-flops.</string>
     <string name="menu_table_create_hardware">Device</string>
     <string name="menu_table_create_jedec_tt">Creates a JEDEC file for the device</string>
     <string name="menu_table_exportTableLaTeX">Export LaTeX</string>
@@ -1937,7 +1941,130 @@
     <string name="menu_table_new">New</string>
     <string name="menu_table_new_combinatorial">Combinatorial</string>
     <string name="menu_table_new_sequential">Sequential</string>
+    <string name="menu_table_new_sequential_async">Sequential (asynchronous Gray code)</string>
     <string name="menu_table_new_sequential_bidir">Sequential bidirectional</string>
+    <string name="menu_table_sequential_generator">Sequential Circuit Generator...</string>
+    <string name="menu_table_sequential_generator_tt">Configure and generate synchronous or asynchronous sequential circuits.</string>
+    <string name="menu_table_transitionTable">Transition Table...</string>
+    <string name="menu_table_transitionTable_tt">View and edit the 2D transition/flow table.</string>
+    <string name="menu_table_stateGraph">State Graph (FSM)...</string>
+    <string name="menu_table_stateGraph_tt">View and edit the state graph in the FSM editor.</string>
+    <string name="menu_table_createViaGraph">Create Truth Table via Graph...</string>
+    <string name="menu_table_async_mode">Asynchronous Flow Table (Stable States)</string>
+    <string name="menu_table_async_mode_tt">Highlights stable states (Next State = Present State) for asynchronous flow tables.</string>
+    <string name="menu_table_add_state">Add State</string>
+    <string name="menu_table_remove_state">Remove State</string>
+    <string name="menu_table_add_input">Add Input</string>
+    <string name="menu_table_remove_input">Remove Input</string>
+    <string name="menu_table_add_output">Add Output</string>
+    <string name="menu_table_remove_output">Remove Output</string>
+    <string name="menu_table_apply_synthesis">Apply to Synthesis</string>
+    <string name="menu_table_generate_tt">Generate Truth Table</string>
+    <string name="menu_table_seq_mode">Synthesis Mode</string>
+    <string name="menu_table_seq_mode_sync">Synchronous (with Clock)</string>
+    <string name="menu_table_seq_mode_async_feedback">Asynchronous (Feedback loops)</string>
+    <string name="menu_table_seq_mode_async_rs">Asynchronous (RS Latches)</string>
+    <string name="menu_table_seq_pattern">Sequence Pattern</string>
+    <string name="menu_table_pattern_bin_up">Binary Counter Up</string>
+    <string name="menu_table_pattern_bin_down">Binary Counter Down</string>
+    <string name="menu_table_pattern_bin_bidir">Binary Counter Up/Down (with D)</string>
+    <string name="menu_table_pattern_gray">Gray Code Counter (Race-Free)</string>
+    <string name="menu_table_pattern_gray_bidir">Gray Code Up/Down (with D)</string>
+    <string name="menu_table_pattern_ring">Ring Counter (One-Hot)</string>
+    <string name="menu_table_pattern_johnson">Johnson Counter (Twisted Ring)</string>
+    <string name="menu_table_pattern_sr_nor">SR Latch (NOR: S, R)</string>
+    <string name="menu_table_pattern_sr_nand">~S~R Latch (NAND: /S, /R)</string>
+    <string name="menu_table_pattern_custom">Custom Sequence</string>
+    <string name="menu_table_pattern_sr_nor_desc">Asynchronous SR latch using NOR gates. Inputs: S (Set), R (Reset). Q = NOR(R, Q'), Q' = NOR(S, Q).</string>
+    <string name="menu_table_pattern_sr_nand_desc">Asynchronous SR latch using NAND gates. Inputs: /S, /R (active low). Q = NAND(/S, Q'), Q' = NAND(/R, Q).</string>
+    <string name="menu_table_pattern_gray_desc">Gray code counter: adjacent states differ by one bit. Race-free for asynchronous synthesis.</string>
+    <string name="menu_table_pattern_gray_bidir_desc">Bidirectional Gray code counter with direction input D. D=0: count down, D=1: count up.</string>
+    <string name="menu_table_pattern_bin_up_desc">Binary up counter: counts from 0 to 2^n - 1 and wraps around.</string>
+    <string name="menu_table_pattern_bin_down_desc">Binary down counter: counts from 2^n - 1 to 0 and wraps around.</string>
+    <string name="menu_table_pattern_bin_bidir_desc">Bidirectional binary counter with direction input D. D=0: count down, D=1: count up.</string>
+    <string name="menu_table_pattern_ring_desc">Ring counter (one-hot): single 1 circulates through all bits. 2^n states, only n are used.</string>
+    <string name="menu_table_pattern_johnson_desc">Johnson (twisted ring) counter: shifts with inverted feedback. 2n states for n bits, race-free transitions.</string>
+    <string name="menu_table_pattern_custom_desc">Empty table for a custom state machine. Add states and define transitions manually.</string>
+    <string name="menu_table_seq_bits">State Bits</string>
+    <string name="menu_table_seq_bits_tt">Number of state bits for the preset (2^n states). Latch presets always use 1 bit.</string>
+    <string name="menu_table_seq_prefix">Variable Prefix</string>
+    <string name="menu_table_seq_custom_values">Custom States (comma-separated)</string>
+    <string name="msg_enter_state_name">Enter state name</string>
+    <string name="msg_enter_input_name">Enter input variable name</string>
+    <string name="msg_enter_output_name">Enter output variable name</string>
+    <string name="tab_sequential">Sequential Circuits</string>
+    <string name="btn_sequential_help">How to Use / Guide</string>
+    <string name="btn_load_preset">Load Preset</string>
+    <string name="btn_sync_truth_table">Sync to Truth Table</string>
+    <string name="menu_table_hazard_free">Hazard-Free (Complete Sum)</string>
+    <string name="menu_table_hazard_free_tt">Retains all prime implicants to prevent static-1 glitches during transitions.</string>
+    <string name="menu_table_async_race_free">Critical Race-Free RS Synthesis</string>
+    <string name="menu_table_async_race_free_tt">Synthesizes asynchronous circuit using race-free state encoding and hazard-free SR excitation.</string>
+    <string name="err_unstableOscillator_N">Unstable oscillator detected in variable ''{0}'': S and R are simultaneously active!</string>
+    <string name="msg_sequential_help_title">Sequential Circuits &amp; Latches - User Guide</string>
+    <string name="msg_sequential_help"><![CDATA[<html>
+<body>
+<h2>Sequential Circuits &amp; Latches Generator Guide</h2>
+
+<p>This dedicated <b>Sequential Circuits</b> tab enables designing, analyzing, and synthesizing both <b>Synchronous</b> (clocked) and <b>Asynchronous</b> (unclocked feedback) sequential circuits.</p>
+
+<h3>1. Synchronous vs. Asynchronous Circuits</h3>
+<ul>
+  <li><b>Synchronous (with Clock):</b> State transitions are synchronized to clock pulses (rising or falling edge of an external Clock). Memory is implemented using D or JK flip-flops. Safe from timing race hazards because all signals settle during the clock period before the next edge.</li>
+  <li><b>Asynchronous (Feedback loops):</b> No clock signal! The circuit responds directly and immediately when inputs change. Memory is held using cross-coupled gates (feedback loops, e.g. NOR or NAND latches). Requires race-free input transitions (Gray code, changing 1 bit at a time).</li>
+  <li><b>Asynchronous (RS Latches):</b> Uses unclocked set/reset latch elements without an external clock input.</li>
+</ul>
+
+<h3>2. Laboratory Exercise: Asynchronous RS Latches</h3>
+
+<h4>Zadanie 1: RS Latch with NOR Gates</h4>
+<p>Constructed from two cross-coupled NOR gates: <code>Q = !(R | Q_n)</code>, <code>Q_n = !(S | Q)</code>.</p>
+<p>Characteristic next-state equation: <code>Q^(n+1) = S + !R * Q^n</code></p>
+<table>
+  <tr><th>S</th><th>R</th><th>Q^n</th><th>Q^(n+1)</th><th>Operation</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td class="stable">0</td><td>Store / Hold 0 (Stable)</td></tr>
+  <tr><td>0</td><td>0</td><td>1</td><td class="stable">1</td><td>Store / Hold 1 (Stable)</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td class="stable">0</td><td>Reset: Q=0 (Stable)</td></tr>
+  <tr><td>0</td><td>1</td><td>1</td><td>0</td><td>Reset: transitions to Q=0</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>1</td><td>Set: transitions to Q=1</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td class="stable">1</td><td>Set: Q=1 (Stable)</td></tr>
+  <tr><td>1</td><td>1</td><td>0</td><td>- (X)</td><td>Forbidden state (Race hazard!)</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>- (X)</td><td>Forbidden state (Race hazard!)</td></tr>
+</table>
+
+<h4>Zadanie 2: ~S~R Latch with NAND Gates (Active Low)</h4>
+<p>Constructed from two cross-coupled NAND gates: <code>Q = !(~S &amp; Q_n)</code>, <code>Q_n = !(~R &amp; Q)</code>.</p>
+<p>Inputs: Active-low <code>/S</code> and <code>/R</code> (represented as <code>S_n</code> and <code>R_n</code>).</p>
+<p>Characteristic next-state equation: <code>Q^(n+1) = !S_n + R_n * Q^n</code></p>
+<table>
+  <tr><th>~S</th><th>~R</th><th>Q^n</th><th>Q^(n+1)</th><th>Operation</th></tr>
+  <tr><td>0</td><td>0</td><td>-</td><td>- (X)</td><td>Forbidden (Both outputs 1!)</td></tr>
+  <tr><td>0</td><td>1</td><td>0 / 1</td><td class="stable">1</td><td>Set (Q=1, Stable)</td></tr>
+  <tr><td>1</td><td>0</td><td>0 / 1</td><td class="stable">0</td><td>Reset (Q=0, Stable)</td></tr>
+  <tr><td>1</td><td>1</td><td>0 / 1</td><td class="stable">Q^n</td><td>Store / Hold (Stable)</td></tr>
+</table>
+
+<h3>3. Using the 2D Transition Table (Tablica Przejść)</h3>
+<ul>
+  <li><b>Rows:</b> Present states (e.g. <code>S0 (0)</code>, <code>S1 (1)</code>).</li>
+  <li><b>Columns:</b> Input combinations arranged in Gray code order (<code>00</code>, <code>01</code>, <code>11</code>, <code>10</code>).</li>
+  <li><b>Green Bold Cells:</b> Represent <b>Stable States</b> where Next State = Present State (<code>Q^(n+1) = Q^n</code>). In asynchronous systems, the circuit remains in a stable state until an input changes.</li>
+  <li><b>Cell Editing:</b> Click on any cell in the table to change the next state or select <code>-</code> (don't care / forbidden).</li>
+  <li><b>Toolbar:</b> Use <code>+ State</code>, <code>- State</code>, <code>+ Input</code>, <code>+ Output</code> to modify the size and variables of the transition table.</li>
+</ul>
+
+<h3>4. State Graph (FSM Editor)</h3>
+<p>Click <b>State Graph (FSM)...</b> to view or edit the finite state machine visually. You can create states, draw transition arrows, and assign boolean conditions. Clicking <i>Create Truth Table</i> inside the FSM editor automatically synchronizes the graph back into this table.</p>
+
+<h3>5. Circuit Synthesis</h3>
+<ul>
+  <li><b>Sync to Truth Table:</b> Converts the transition table to the combinatorial table tab so you can view Karnaugh maps and minimal boolean expressions.</li>
+  <li><b>Create Circuit:</b> Directly synthesizes the circuit schematic. In Asynchronous (Feedback) mode, cross-coupled gates and feedback tunnels are generated without a clock.</li>
+  <li><b>Simulation:</b> Press the green <b>Play</b> button in Digital's toolbar to simulate the circuit and interactively flip input switches!</li>
+</ul>
+</body>
+</html>]]></string>
+    <string name="menu_sequential">Sequential</string>
     <string name="menu_table_reorder_inputs">Reorder/Delete Input Variables</string>
     <string name="menu_table_columnsAddVariable">Add Input Variable</string>
     <string name="menu_table_columnsAddVariable_tt">Adds a new input variable to the table.</string>

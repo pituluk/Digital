@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017 Helmut Neemann
+ * Copyright (c) 2017 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -23,14 +24,35 @@ import java.util.List;
  * The normal QMC minimizer.
  */
 public class MinimizerQuineMcCluskey implements MinimizerInterface {
+    private boolean hazardFree;
+
+    /**
+     * Sets hazard-free minimization mode.
+     *
+     * @param hazardFree true to retain all prime implicants (complete sum)
+     * @return this for chained calls
+     */
+    public MinimizerQuineMcCluskey setHazardFree(boolean hazardFree) {
+        this.hazardFree = hazardFree;
+        return this;
+    }
+
+    /**
+     * @return true if hazard-free minimization is active
+     */
+    public boolean isHazardFree() {
+        return hazardFree;
+    }
+
     @Override
     public void minimize(List<Variable> vars, BoolTable boolTable, String resultName, ExpressionListener listener) throws ExpressionException, FormatterException {
         QuineMcCluskey qmc = createQuineMcCluskey(vars)
+                .setHazardFree(hazardFree)
                 .fillTableWith(boolTable);
         PrimeSelector ps = new PrimeSelectorDefault();
         Expression e = qmc.simplify(ps).getExpression();
 
-        if (ps.getAllSolutions() != null) {
+        if (!hazardFree && ps.getAllSolutions() != null) {
             for (ArrayList<TableRow> i : ps.getAllSolutions()) {
                 listener.resultFound(resultName, QuineMcCluskey.addAnd(null, i, vars));
             }

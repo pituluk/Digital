@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2018 Helmut Neemann
+ * Copyright (c) 2018 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -65,10 +66,14 @@ public class ModelAnalyserInfo {
     public TreeMap<String, String> getPins() {
         if (pins == null) {
             pins = new TreeMap<>();
-            for (Signal s : this.inputs)
-                addPinNumber(s);
-            for (Signal s : this.outputs)
-                addPinNumber(s);
+            if (this.inputs != null) {
+                for (Signal s : this.inputs)
+                    addPinNumber(s);
+            }
+            if (this.outputs != null) {
+                for (Signal s : this.outputs)
+                    addPinNumber(s);
+            }
         }
         return pins;
     }
@@ -84,12 +89,16 @@ public class ModelAnalyserInfo {
     public ArrayList<String> getPinsWithoutNumber() {
         if (pinsWithoutNumber == null) {
             pinsWithoutNumber = new ArrayList<>();
-            for (Signal s : inputs)
-                if (s.missingPinNumber())
-                    pinsWithoutNumber.add((s.getName()));
-            for (Signal s : outputs)
-                if (s.missingPinNumber())
-                    pinsWithoutNumber.add((s.getName()));
+            if (inputs != null) {
+                for (Signal s : inputs)
+                    if (s.missingPinNumber())
+                        pinsWithoutNumber.add((s.getName()));
+            }
+            if (outputs != null) {
+                for (Signal s : outputs)
+                    if (s.missingPinNumber())
+                        pinsWithoutNumber.add((s.getName()));
+            }
         }
         return pinsWithoutNumber;
     }

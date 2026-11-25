@@ -1934,6 +1934,10 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="menu_table_createNOr_tt">Erzeugt eine Schaltung, welche der Wahrheitstabelle entspricht nur mit NOr-Gattern.</string>
     <string name="menu_table_createCircuit74xx">Schaltung mit 74xx-DIL-Chips</string>
     <string name="menu_table_createCircuit74xx_tt">Erstellt eine Schaltung, die die Wahrheitstabelle abbildet. Verwendet 74xx-DIL-Chips und fasst Gatter – wann immer möglich – nach Chipfamilie zusammen.</string>
+    <string name="menu_table_createCircuitAsyncFeedback">Schaltung (asynchron - Rückkopplung)</string>
+    <string name="menu_table_createCircuitAsyncFeedback_tt">Erzeugt eine asynchrone sequentielle Schaltung mit Rückkopplungsschleifen.</string>
+    <string name="menu_table_createCircuitAsyncRS">Schaltung (asynchron - RS-Flipflops)</string>
+    <string name="menu_table_createCircuitAsyncRS_tt">Erzeugt eine asynchrone sequentielle Schaltung mit ungeclockten RS-Flipflops.</string>
     <string name="menu_table_create_hardware">Bausteine</string>
     <string name="menu_table_create_jedec_tt">Erzeugt eine JEDEC Datei für den Baustein</string>
     <string name="menu_table_exportTableLaTeX">Erzeuge LaTeX</string>
@@ -1955,7 +1959,129 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="menu_table_new">Neu</string>
     <string name="menu_table_new_combinatorial">Kombinatorisch</string>
     <string name="menu_table_new_sequential">Automat</string>
+    <string name="menu_table_new_sequential_async">Automat (asynchroner Gray-Code)</string>
     <string name="menu_table_new_sequential_bidir">Automat bidirektional</string>
+    <string name="menu_table_sequential_generator">Generator für sequentielle Schaltungen...</string>
+    <string name="menu_table_sequential_generator_tt">Synchrone und asynchrone sequentielle Schaltungen konfigurieren und erzeugen.</string>
+    <string name="menu_table_transitionTable">Überführungstabelle...</string>
+    <string name="menu_table_transitionTable_tt">Zeigt die 2D-Überführungstabelle/Ablauftabelle an.</string>
+    <string name="menu_table_stateGraph">Zustandsgraph (FSM)...</string>
+    <string name="menu_table_stateGraph_tt">Öffnet den Zustandsgraphen im FSM-Editor.</string>
+    <string name="menu_table_createViaGraph">Wahrheitstabelle über Graph erstellen...</string>
+    <string name="menu_table_async_mode">Asynchrone Ablauftabelle (Stabile Zustände)</string>
+    <string name="menu_table_async_mode_tt">Hebt stabile Zustände hervor (Folgezustand = Ist-Zustand).</string>
+    <string name="menu_table_add_state">Zustand hinzufügen</string>
+    <string name="menu_table_remove_state">Zustand entfernen</string>
+    <string name="menu_table_add_input">Eingang hinzufügen</string>
+    <string name="menu_table_remove_input">Eingang entfernen</string>
+    <string name="menu_table_add_output">Ausgang hinzufügen</string>
+    <string name="menu_table_remove_output">Ausgang entfernen</string>
+    <string name="menu_table_apply_synthesis">In Synthese übernehmen</string>
+    <string name="menu_table_generate_tt">Wahrheitstabelle erzeugen</string>
+    <string name="menu_table_seq_mode">Synthese-Modus</string>
+    <string name="menu_table_seq_mode_sync">Synchron (mit Takt)</string>
+    <string name="menu_table_seq_mode_async_feedback">Asynchron (Rückkopplung)</string>
+    <string name="menu_table_seq_mode_async_rs">Asynchron (RS-Latches)</string>
+    <string name="menu_table_seq_pattern">Muster</string>
+    <string name="menu_table_pattern_bin_up">Binärzähler aufwärts</string>
+    <string name="menu_table_pattern_bin_down">Binärzähler abwärts</string>
+    <string name="menu_table_pattern_bin_bidir">Binärzähler bidirektional (mit D)</string>
+    <string name="menu_table_pattern_gray">Gray-Code-Zähler</string>
+    <string name="menu_table_pattern_gray_bidir">Gray-Code bidirektional (mit D)</string>
+    <string name="menu_table_pattern_ring">Ringzähler (1-aus-N)</string>
+    <string name="menu_table_pattern_johnson">Johnson-Zähler</string>
+    <string name="menu_table_pattern_sr_nor">RS-Flipflop (NOR: S, R)</string>
+    <string name="menu_table_pattern_sr_nand">~S~R-Flipflop (NAND: /S, /R)</string>
+    <string name="menu_table_pattern_custom">Benutzerdefinierte Folge</string>
+    <string name="menu_table_pattern_sr_nor_desc">Asynchrones RS-Flipflop mit NOR-Gattern. Eingänge: S (Setzen), R (Rücksetzen). Q = NOR(R, Q'), Q' = NOR(S, Q).</string>
+    <string name="menu_table_pattern_sr_nand_desc">Asynchrones RS-Flipflop mit NAND-Gattern. Eingänge: /S, /R (aktiv-niedrig). Q = NAND(/S, Q'), Q' = NAND(/R, Q).</string>
+    <string name="menu_table_pattern_gray_desc">Gray-Code-Zähler: benachbarte Zustände unterscheiden sich um ein Bit. Rennfrei für asynchrone Synthese.</string>
+    <string name="menu_table_pattern_gray_bidir_desc">Bidirektionaler Gray-Code-Zähler mit Richtungseingang D. D=0: abwärts, D=1: aufwärts.</string>
+    <string name="menu_table_pattern_bin_up_desc">Binärzähler aufwärts: zählt von 0 bis 2^n - 1 und beginnt wieder von vorn.</string>
+    <string name="menu_table_pattern_bin_down_desc">Binärzähler abwärts: zählt von 2^n - 1 bis 0 und beginnt wieder von vorn.</string>
+    <string name="menu_table_pattern_bin_bidir_desc">Bidirektionaler Binärzähler mit Richtungseingang D. D=0: abwärts, D=1: aufwärts.</string>
+    <string name="menu_table_pattern_ring_desc">Ringzähler (1-aus-N): eine einzelne 1 zirkuliert durch alle Bits. 2^n Zustände, nur n werden verwendet.</string>
+    <string name="menu_table_pattern_johnson_desc">Johnson-Zähler (verdrehter Ring): Schieberegister mit invertierter Rückkopplung. 2n Zustände für n Bits, rennfreie Übergänge.</string>
+    <string name="menu_table_pattern_custom_desc">Leere Tabelle für eine benutzerdefinierte Zustandsmaschine. Zustände und Übergänge manuell festlegen.</string>
+    <string name="menu_table_seq_bits">Zustandsbits</string>
+    <string name="menu_table_seq_bits_tt">Anzahl der Zustandsbits für das Muster (2^n Zustände). Latch-Muster verwenden immer 1 Bit.</string>
+    <string name="menu_table_seq_prefix">Variablen-Präfix</string>
+    <string name="menu_table_seq_custom_values">Zustände (kommagetrennt)</string>
+    <string name="msg_enter_state_name">Zustandsnamen eingeben</string>
+    <string name="msg_enter_input_name">Eingangsnamen eingeben</string>
+    <string name="msg_enter_output_name">Ausgangsnamen eingeben</string>
+    <string name="tab_sequential">Sequentielle Schaltungen</string>
+    <string name="btn_sequential_help">Anleitung / Hilfe</string>
+    <string name="btn_load_preset">Muster laden</string>
+    <string name="btn_sync_truth_table">Mit Wahrheitstabelle abgleichen</string>
+    <string name="menu_table_hazard_free">Hazardfrei (Vollständige Summe)</string>
+    <string name="menu_table_hazard_free_tt">Behält alle Primimplikanten bei, um statische 1-Glitches bei Signalwechseln zu verhindern.</string>
+    <string name="menu_table_async_race_free">Kritisch-rennfreie RS-Synthese</string>
+    <string name="menu_table_async_race_free_tt">Synthetisiert eine asynchrone Schaltung mit rennfreier Zustandscodierung und hazardfreier RS-Ansteuerung.</string>
+    <string name="err_unstableOscillator_N">Instabiler Oszillator in Variable ''{0}'' erkannt: S und R sind gleichzeitig aktiv!</string>
+    <string name="msg_sequential_help_title">Sequentielle Schaltungen &amp; Flipflops - Benutzerhandbuch</string>
+    <string name="msg_sequential_help"><![CDATA[<html>
+<body>
+<h2>Leitfaden für Sequentielle Schaltungen &amp; Flipflops</h2>
+
+<p>Dieser dedizierte Reiter <b>Sequentielle Schaltungen</b> ermöglicht den Entwurf, die Analyse und die Synthese sowohl von <b>synchronen</b> (taktgesteuerten) als auch von <b>asynchronen</b> (rückgekoppelten) sequentiellen Schaltungen.</p>
+
+<h3>1. Synchrone vs. Asynchrone Schaltungen</h3>
+<ul>
+  <li><b>Synchron (mit Takt):</b> Zustandsübergänge erfolgen synchron zu Taktimpulsen. Verwendet D- oder JK-Flipflops. Keine Wettläufe (Races), da Signale innerhalb der Taktperiode einschwingen.</li>
+  <li><b>Asynchron (Rückkopplungsschleifen):</b> Kein Taktsignal! Die Schaltung reagiert sofort auf Eingangsänderungen. Speicherung über kreuzgekoppelte Gatter (z. B. NOR- oder NAND-Latches). Erfordert rennfreie Eingangsfolgen (Gray-Code, jeweils nur 1 Bit Änderung).</li>
+  <li><b>Asynchron (RS-Latches):</b> Verwendet ungetaktete RS-Speicherelemente ohne externen Takt.</li>
+</ul>
+
+<h3>2. Praktikumsaufgabe: Asynchrone RS-Flipflops</h3>
+
+<h4>Aufgabe 1: RS-Latch mit NOR-Gattern</h4>
+<p>Aufgebaut aus zwei kreuzgekoppelten NOR-Gattern: <code>Q = !(R | Q_n)</code>, <code>Q_n = !(S | Q)</code>.</p>
+<p>Zustandsübergangsgleichung: <code>Q^(n+1) = S + !R * Q^n</code></p>
+<table>
+  <tr><th>S</th><th>R</th><th>Q^n</th><th>Q^(n+1)</th><th>Operation</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td class="stable">0</td><td>Halten 0 (Stabil)</td></tr>
+  <tr><td>0</td><td>0</td><td>1</td><td class="stable">1</td><td>Halten 1 (Stabil)</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td class="stable">0</td><td>Rücksetzen: Q=0 (Stabil)</td></tr>
+  <tr><td>0</td><td>1</td><td>1</td><td>0</td><td>Rücksetzen: Übergang zu Q=0</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>1</td><td>Setzen: Übergang zu Q=1</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td class="stable">1</td><td>Setzen: Q=1 (Stabil)</td></tr>
+  <tr><td>1</td><td>1</td><td>0</td><td>- (X)</td><td>Verboten (Wettlaufgefahr!)</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>- (X)</td><td>Verboten (Wettlaufgefahr!)</td></tr>
+</table>
+
+<h4>Aufgabe 2: ~S~R-Latch mit NAND-Gattern (Low-Aktiv)</h4>
+<p>Aufgebaut aus zwei kreuzgekoppelten NAND-Gattern: <code>Q = !(~S &amp; Q_n)</code>, <code>Q_n = !(~R &amp; Q)</code>.</p>
+<p>Eingänge: Low-aktiv <code>/S</code> und <code>/R</code> (bezeichnet als <code>S_n</code> und <code>R_n</code>).</p>
+<p>Zustandsübergangsgleichung: <code>Q^(n+1) = !S_n + R_n * Q^n</code></p>
+<table>
+  <tr><th>~S</th><th>~R</th><th>Q^n</th><th>Q^(n+1)</th><th>Operation</th></tr>
+  <tr><td>0</td><td>0</td><td>-</td><td>- (X)</td><td>Verboten (Beide Ausgänge 1!)</td></tr>
+  <tr><td>0</td><td>1</td><td>0 / 1</td><td class="stable">1</td><td>Setzen (Q=1, Stabil)</td></tr>
+  <tr><td>1</td><td>0</td><td>0 / 1</td><td class="stable">0</td><td>Rücksetzen (Q=0, Stabil)</td></tr>
+  <tr><td>1</td><td>1</td><td>0 / 1</td><td class="stable">Q^n</td><td>Halten (Stabil)</td></tr>
+</table>
+
+<h3>3. Verwendung der 2D-Übergangstabelle</h3>
+<ul>
+  <li><b>Zeilen:</b> Aktuelle Zustände (z. B. <code>S0 (0)</code>, <code>S1 (1)</code>).</li>
+  <li><b>Spalten:</b> Eingangskombinationen in Gray-Code-Reihenfolge (<code>00</code>, <code>01</code>, <code>11</code>, <code>10</code>).</li>
+  <li><b>Grüne Hervorhebung:</b> Kennzeichnet <b>stabile Zustände</b>, bei denen Folgezustand = Ist-Zustand ist (<code>Q^(n+1) = Q^n</code>).</li>
+  <li><b>Zellen bearbeiten:</b> Klick auf eine Zelle ermöglicht die Auswahl des Folgezustands oder <code>-</code> (Don't Care).</li>
+</ul>
+
+<h3>4. Zustandsgraph (FSM-Editor)</h3>
+<p>Klicken Sie auf <b>Zustandsgraph (FSM)...</b>, um das Zustandsdiagramm grafisch anzuzeigen oder zu bearbeiten.</p>
+
+<h3>5. Schaltungssynthese</h3>
+<ul>
+  <li><b>Mit Wahrheitstabelle abgleichen:</b> Überträgt die Tabelle in den Wahrheitstabellen-Reiter für KV-Diagramme und minimale Ausdrücke.</li>
+  <li><b>Schaltung erzeugen:</b> Erzeugt direkt den Schaltplan. Im asynchronen Modus entstehen rückgekoppelte Gatter ohne Takt.</li>
+  <li><b>Simulation:</b> Klicken Sie auf die grüne <b>Play</b>-Schaltfläche in Digital, um die Schaltung interaktiv zu testen!</li>
+</ul>
+</body>
+</html>]]></string>
+    <string name="menu_sequential">Sequentiell</string>
     <string name="menu_table_reorder_inputs">Eingangsvariablen umsortieren/löschen</string>
     <string name="menu_table_reorder_outputs">Ergebnisspalten umsortieren/löschen</string>
     <string name="menu_table_columnsAdd">Ergebnisspalte hinzufügen</string>

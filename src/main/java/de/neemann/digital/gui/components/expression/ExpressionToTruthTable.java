@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2026
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
 package de.neemann.digital.gui.components.expression;
 
+import de.neemann.digital.analyse.AsynchronousLatchAnalyzer;
+import de.neemann.digital.analyse.ModelAnalyserInfo;
 import de.neemann.digital.analyse.TruthTable;
 import de.neemann.digital.analyse.expression.ContextFiller;
 import de.neemann.digital.analyse.expression.Expression;
@@ -52,16 +54,20 @@ public final class ExpressionToTruthTable {
      */
     public static TruthTable create(ArrayList<Expression> expressions, boolean simplify) throws ExpressionException {
         Map<String, Expression> namedExpressions = new HashMap<>();
+        Set<String> latchVars = new HashSet<>();
         for (Expression expression : expressions) {
             if (expression instanceof NamedExpression) {
                 NamedExpression named = (NamedExpression) expression;
                 namedExpressions.put(named.getName(), named.getExpression().copy());
+                if (AsynchronousLatchAnalyzer.isSelfReferential(named.getName(), named.getExpression())) {
+                    latchVars.add(named.getName());
+                }
             }
         }
 
         Map<String, Expression> resolvedNamedExpressions = new HashMap<>();
         for (String name : namedExpressions.keySet())
-            resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, new HashSet<>());
+            resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, new HashSet<>(), latchVars);
 
         ArrayList<Expression> functions = new ArrayList<>();
         TreeSet<Variable> variableSet = new TreeSet<>();
@@ -69,11 +75,21 @@ public final class ExpressionToTruthTable {
             Expression function = expression instanceof NamedExpression
                     ? ((NamedExpression) expression).getExpression()
                     : expression;
-            function = resolveExpression(function.copy(), namedExpressions, resolvedNamedExpressions, new HashSet<>());
+            function = resolveExpression(function.copy(), namedExpressions, resolvedNamedExpressions, new HashSet<>(), latchVars);
             if (simplify)
                 function = QuineMcCluskey.simplify(function);
             functions.add(function);
             variableSet.addAll(function.traverse(new VariableVisitor()).getVariables());
+        }
+
+        for (int i = 0; i < functions.size(); i++) {
+            Expression source = expressions.get(i);
+            if (source instanceof NamedExpression) {
+                String name = ((NamedExpression) source).getName();
+                if (latchVars.contains(name)) {
+                    new AsynchronousLatchAnalyzer(name, functions.get(i));
+                }
+            }
         }
 
         ArrayList<Variable> variables = new ArrayList<>(variableSet);
@@ -95,6 +111,15 @@ public final class ExpressionToTruthTable {
                 truthTable.setByContext(i, context, functions.get(i).calculate(context) ? 1 : 0);
             }
         }
+
+        if (!latchVars.isEmpty()) {
+            ModelAnalyserInfo mai = new ModelAnalyserInfo(null);
+            for (String lv : latchVars) {
+                mai.setSequentialInitValue(lv, 0);
+            }
+            truthTable.setModelAnalyzerInfo(mai);
+        }
+
         return truthTable;
     }
 
@@ -102,19 +127,24 @@ public final class ExpressionToTruthTable {
             String name,
             Map<String, Expression> namedExpressions,
             Map<String, Expression> resolvedNamedExpressions,
-            Set<String> resolving) throws ExpressionException {
+            Set<String> resolving,
+            Set<String> latchVars) throws ExpressionException {
         Expression resolved = resolvedNamedExpressions.get(name);
         if (resolved != null)
             return resolved.copy();
-        if (!resolving.add(name))
+        if (!resolving.add(name)) {
+            if (latchVars.contains(name)) {
+                return new Variable(name);
+            }
             throw new ExpressionException("Circular expression alias: " + name);
+        }
 
         Expression expression = namedExpressions.get(name);
         if (expression == null)
             throw new ExpressionException("Expression alias not found: " + name);
 
         try {
-            resolved = resolveExpression(expression.copy(), namedExpressions, resolvedNamedExpressions, resolving);
+            resolved = resolveExpression(expression.copy(), namedExpressions, resolvedNamedExpressions, resolving, latchVars);
             resolvedNamedExpressions.put(name, resolved.copy());
         } finally {
             resolving.remove(name);
@@ -126,14 +156,18 @@ public final class ExpressionToTruthTable {
             Expression expression,
             Map<String, Expression> namedExpressions,
             Map<String, Expression> resolvedNamedExpressions,
-            Set<String> resolving) throws ExpressionException {
+            Set<String> resolving,
+            Set<String> latchVars) throws ExpressionException {
         try {
             return ExpressionModifier.modifyExpression(expression.copy(), variableExpression -> {
                 if (variableExpression instanceof Variable) {
                     String name = ((Variable) variableExpression).getIdentifier();
                     if (namedExpressions.containsKey(name)) {
+                        if (latchVars.contains(name)) {
+                            return variableExpression;
+                        }
                         try {
-                            return resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, resolving);
+                            return resolveNamedExpression(name, namedExpressions, resolvedNamedExpressions, resolving, latchVars);
                         } catch (ExpressionException e) {
                             throw new AliasResolutionException(e);
                         }

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016 Helmut Neemann
+ * Copyright (c) 2016 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -23,6 +24,7 @@ import de.neemann.digital.analyse.format.TruthTableFormatter;
 import de.neemann.digital.analyse.format.TruthTableFormatterCSV;
 import de.neemann.digital.analyse.format.TruthTableFormatterHex;
 import de.neemann.digital.analyse.format.TruthTableFormatterTestCase;
+import de.neemann.digital.analyse.TransitionTable;
 import de.neemann.digital.analyse.quinemc.BoolTableByteArray;
 import de.neemann.digital.analyse.quinemc.BoolTable;
 import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
@@ -42,6 +44,8 @@ import de.neemann.digital.draw.graphics.text.Parser;
 import de.neemann.digital.draw.graphics.text.formatter.PlainTextFormatter;
 import de.neemann.digital.draw.library.ElementLibrary;
 import de.neemann.digital.draw.shapes.ShapeFactory;
+import de.neemann.digital.fsm.FSM;
+import de.neemann.digital.fsm.gui.FSMFrame;
 import de.neemann.digital.gui.Main;
 import de.neemann.digital.gui.SaveAsHelper;
 import de.neemann.digital.gui.components.AttributeDialog;
@@ -206,24 +210,8 @@ public class TableDialog extends JDialog {
 
         JMenuBar bar = new JMenuBar();
         bar.add(createFileMenu());
-
-        JMenu sizeMenu = new JMenu(Lang.get("menu_table_new"));
-
-        JMenu combinatorial = new JMenu(Lang.get("menu_table_new_combinatorial"));
-        sizeMenu.add(combinatorial);
-        for (int i = 2; i <= 8; i++)
-            combinatorial.add(new JMenuItem(new SizeAction(i)));
-        JMenu sequential = new JMenu(Lang.get("menu_table_new_sequential"));
-        sizeMenu.add(sequential);
-        for (int i = 2; i <= 8; i++)
-            sequential.add(new JMenuItem(new SizeSequentialAction(i)));
-        if (Main.isExperimentalMode()) {
-            JMenu sequentialBiDir = new JMenu(Lang.get("menu_table_new_sequential_bidir"));
-            sizeMenu.add(sequentialBiDir);
-            for (int i = 2; i <= 8; i++)
-                sequentialBiDir.add(new JMenuItem(new SizeSequentialBidirectionalAction(i)));
-        }
-        bar.add(sizeMenu);
+        bar.add(createSizeMenu());
+        bar.add(createSequentialMenu());
 
         JMenu edit = new JMenu(Lang.get("menu_edit"));
         bar.add(edit);
@@ -352,6 +340,7 @@ public class TableDialog extends JDialog {
         resultsPanel.add(createExpressionResultsPanel());
         tablePanel.add(resultsPanel, BorderLayout.SOUTH);
         tabbedPane.addTab(Lang.get("win_table"), tablePanel);
+        tabbedPane.addTab(Lang.get("tab_sequential"), new SequentialPanel(this, library));
         return tabbedPane;
     }
 
@@ -523,6 +512,83 @@ public class TableDialog extends JDialog {
             if (!newName.equals(name))
                 model.setColumnName(columnIndex, newName);
         }
+    }
+
+    private JMenu createSizeMenu() {
+        JMenu sizeMenu = new JMenu(Lang.get("menu_table_new"));
+
+        JMenu combinatorial = new JMenu(Lang.get("menu_table_new_combinatorial"));
+        sizeMenu.add(combinatorial);
+        for (int i = 2; i <= 8; i++)
+            combinatorial.add(new JMenuItem(new SizeAction(i)));
+        JMenu sequential = new JMenu(Lang.get("menu_table_new_sequential"));
+        sizeMenu.add(sequential);
+        for (int i = 2; i <= 8; i++)
+            sequential.add(new JMenuItem(new SizeSequentialAction(i)));
+        JMenu sequentialAsync = new JMenu(Lang.get("menu_table_new_sequential_async"));
+        sizeMenu.add(sequentialAsync);
+        for (int i = 2; i <= 8; i++)
+            sequentialAsync.add(new JMenuItem(new SizeSequentialAsyncAction(i)));
+        if (Main.isExperimentalMode()) {
+            JMenu sequentialBiDir = new JMenu(Lang.get("menu_table_new_sequential_bidir"));
+            sizeMenu.add(sequentialBiDir);
+            for (int i = 2; i <= 8; i++)
+                sequentialBiDir.add(new JMenuItem(new SizeSequentialBidirectionalAction(i)));
+        }
+        sizeMenu.addSeparator();
+        sizeMenu.add(new ToolTipAction(Lang.get("menu_table_sequential_generator")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                new SequentialDialog(TableDialog.this, library).setVisible(true);
+            }
+        }.setToolTip(Lang.get("menu_table_sequential_generator_tt")).createJMenuItem());
+        return sizeMenu;
+    }
+
+    private JMenu createSequentialMenu() {
+        JMenu sequentialMenu = new JMenu(Lang.get("menu_sequential"));
+        sequentialMenu.add(new ToolTipAction(Lang.get("menu_table_transitionTable")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    TransitionTable tt = TransitionTable.fromTruthTable(undoManager.getActual());
+                    new TransitionTableDialog(TableDialog.this, tt, library, TableDialog.this).setVisible(true);
+                } catch (Exception ex) {
+                    new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(ex).show(TableDialog.this);
+                }
+            }
+        }.setToolTip(Lang.get("menu_table_transitionTable_tt")).createJMenuItem());
+
+        sequentialMenu.add(new ToolTipAction(Lang.get("menu_table_stateGraph")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    TransitionTable tt = TransitionTable.fromTruthTable(undoManager.getActual());
+                    FSM fsm = tt.toFSM();
+                    new FSMFrame(TableDialog.this, library).setFSM(fsm).setParentTableDialog(TableDialog.this).setVisible(true);
+                } catch (Exception ex) {
+                    new FSMFrame(TableDialog.this, library).setParentTableDialog(TableDialog.this).setVisible(true);
+                }
+            }
+        }.setToolTip(Lang.get("menu_table_stateGraph_tt")).createJMenuItem());
+
+        sequentialMenu.add(new ToolTipAction(Lang.get("menu_table_createViaGraph")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                new FSMFrame(TableDialog.this, library).setParentTableDialog(TableDialog.this).setVisible(true);
+            }
+        }.createJMenuItem());
+
+        sequentialMenu.addSeparator();
+
+        sequentialMenu.add(new ToolTipAction(Lang.get("menu_table_sequential_generator")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                new SequentialDialog(TableDialog.this, library).setVisible(true);
+            }
+        }.setToolTip(Lang.get("menu_table_sequential_generator_tt")).createJMenuItem());
+
+        return sequentialMenu;
     }
 
     private JMenu createFileMenu() {
@@ -723,6 +789,20 @@ public class TableDialog extends JDialog {
             }
         }.setToolTip(Lang.get("menu_table_createCircuit74xx_tt")).createJMenuItem());
 
+        createSpecial.add(new ToolTipAction(Lang.get("menu_table_createCircuitAsyncFeedback")) {
+            @Override
+            public void actionPerformed(ActionEvent actionEvent) {
+                createCircuit(CircuitBuilder.AsyncMode.FEEDBACK, false, false, false, ExpressionModifier.IDENTITY);
+            }
+        }.setToolTip(Lang.get("menu_table_createCircuitAsyncFeedback_tt")).createJMenuItem());
+
+        createSpecial.add(new ToolTipAction(Lang.get("menu_table_createCircuitAsyncRS")) {
+            @Override
+            public void actionPerformed(ActionEvent actionEvent) {
+                createCircuit(CircuitBuilder.AsyncMode.RS_LATCH, false, false, false, ExpressionModifier.IDENTITY);
+            }
+        }.setToolTip(Lang.get("menu_table_createCircuitAsyncRS_tt")).createJMenuItem());
+
         createSpecial.add(new ToolTipAction(Lang.get("menu_table_createNAnd")) {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
@@ -902,6 +982,10 @@ public class TableDialog extends JDialog {
     }
 
     private void createCircuit(boolean useJKff, boolean useLUTs, boolean use74xx, ExpressionModifier... modifier) {
+        createCircuit(CircuitBuilder.AsyncMode.NONE, useJKff, useLUTs, use74xx, modifier);
+    }
+
+    private void createCircuit(CircuitBuilder.AsyncMode asyncMode, boolean useJKff, boolean useLUTs, boolean use74xx, ExpressionModifier... modifier) {
         try {
             TruthTable actualTable = undoManager.getActual();
             ExpressionListenerStore circuitExpressions =
@@ -909,6 +993,7 @@ public class TableDialog extends JDialog {
 
             final ModelAnalyserInfo modelAnalyzerInfo = actualTable.getModelAnalyzerInfo();
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, actualTable.getVars())
+                    .setAsyncMode(asyncMode)
                     .setUseJK(useJKff)
                     .setUseLUTs(useLUTs)
                     .setUse74xx(use74xx)
@@ -930,6 +1015,25 @@ public class TableDialog extends JDialog {
         } catch (AnalyseException | ExpressionException | FormatterException | RuntimeException e) {
             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
         }
+    }
+
+    /**
+     * Sets a new truth table into the editor.
+     *
+     * @param truthTable the truth table to set
+     */
+    public void setTruthTable(TruthTable truthTable) {
+        clearExpressionTableViews();
+        undoManager.setInitial(truthTable);
+        model.setOriginal(null);
+        tableChanged();
+    }
+
+    /**
+     * @return the tabbed pane containing the main tabs
+     */
+    public JTabbedPane getTabs() {
+        return tabs;
     }
 
     /**
@@ -1451,6 +1555,48 @@ public class TableDialog extends JDialog {
                         val.set(n, ((n + 1) >> i) & 1);
                 }
                 truthTable.addResult(addOne(vars.get(vi).getIdentifier()), val);
+                i--;
+            }
+
+            clearExpressionTableViews();
+            undoManager.setInitial(truthTable);
+            model.setOriginal(null);
+            tableChanged();
+        }
+    }
+
+    private final class SizeSequentialAsyncAction extends AbstractAction {
+        private final int n;
+
+        private SizeSequentialAsyncAction(int n) {
+            super(Lang.get("menu_table_N_variables", n));
+            this.n = n;
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent actionEvent) {
+            ArrayList<Variable> vars = new ArrayList<>();
+            for (int i = n - 1; i >= 0; i--) {
+                vars.add(new Variable("Q_" + i + "^n"));
+            }
+            TruthTable truthTable = new TruthTable(vars);
+            int rows = 1 << n;
+            int[] nextState = new int[rows];
+            for (int r = 0; r < rows; r++) {
+                int k = 0;
+                for (int g = r; g > 0; g >>= 1) {
+                    k ^= g;
+                }
+                int nextK = (k + 1) & (rows - 1);
+                nextState[r] = nextK ^ (nextK >> 1);
+            }
+            int i = n - 1;
+            for (Variable v : vars) {
+                BoolTableByteArray val = new BoolTableByteArray(rows);
+                for (int r = 0; r < rows; r++) {
+                    val.set(r, (nextState[r] >> i) & 1);
+                }
+                truthTable.addResult(addOne(v.getIdentifier()), val);
                 i--;
             }
 

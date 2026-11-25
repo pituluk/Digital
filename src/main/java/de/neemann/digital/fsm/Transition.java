@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -25,7 +26,6 @@ public class Transition extends Movable<Transition> {
     private final State toState;
     private String condition;
     private transient Expression conditionExpression;
-
 
     /**
      * Creates a new transition
@@ -92,7 +92,6 @@ public class Transition extends Movable<Transition> {
                 addRepulsive(t.getPos(), 1500);
     }
 
-
     @Override
     public void setPosDragging(VectorFloat position) {
         super.setPosDragging(posConstrain(position));
@@ -131,7 +130,6 @@ public class Transition extends Movable<Transition> {
             if (getFsm().getActiveTransition() == this)
                 style = Style.HIGHLIGHT;
 
-
         final VectorFloat start;
         final VectorFloat anchor;
         final VectorFloat end;
@@ -149,9 +147,11 @@ public class Transition extends Movable<Transition> {
             VectorFloat d3 = end.sub(toState.getPos());
             float t;
             if (Math.abs(d0.getXFloat() + d3.getXFloat()) > Math.abs(d0.getYFloat() + d3.getYFloat()))
-                t = -4 * (start.getXFloat() + end.getXFloat() - 2 * getPos().getXFloat()) / (3 * (d0.getXFloat() + d3.getXFloat()));
+                t = -4 * (start.getXFloat() + end.getXFloat() - 2 * getPos().getXFloat())
+                        / (3 * (d0.getXFloat() + d3.getXFloat()));
             else
-                t = -4 * (start.getYFloat() + end.getYFloat() - 2 * getPos().getYFloat()) / (3 * (d0.getYFloat() + d3.getYFloat()));
+                t = -4 * (start.getYFloat() + end.getYFloat() - 2 * getPos().getYFloat())
+                        / (3 * (d0.getYFloat() + d3.getYFloat()));
             anchor0 = start.add(d0.mul(t));
             anchor = end.add(d3.mul(t));
         } else {
@@ -195,7 +195,8 @@ public class Transition extends Movable<Transition> {
         }
     }
 
-    static void drawArrow(Graphic gr, VectorInterface start, VectorInterface anchor0, VectorInterface anchor, VectorInterface end, Style arrowStyle) {
+    static void drawArrow(Graphic gr, VectorInterface start, VectorInterface anchor0, VectorInterface anchor,
+            VectorInterface end, Style arrowStyle) {
         if (anchor == null)
             anchor = start.add(end).div(2);
 
@@ -246,7 +247,7 @@ public class Transition extends Movable<Transition> {
      * @return the condition
      * @throws FiniteStateMachineException FiniteStateMachineException
      */
-    Expression getConditionExpression() throws FiniteStateMachineException {
+    public Expression getConditionExpression() throws FiniteStateMachineException {
         if (conditionExpression == null) {
             if (condition != null && condition.trim().length() > 0)
                 try {
@@ -266,21 +267,21 @@ public class Transition extends Movable<Transition> {
      * @return true if this transition has a condition
      * @throws FiniteStateMachineException FiniteStateMachineException
      */
-    boolean hasCondition() throws FiniteStateMachineException {
+    public boolean hasCondition() throws FiniteStateMachineException {
         return getConditionExpression() != null;
     }
 
     /**
      * @return the starting state
      */
-    State getStartState() {
+    public State getStartState() {
         return fromState;
     }
 
     /**
      * @return the target state
      */
-    State getTargetState() {
+    public State getTargetState() {
         return toState;
     }
 

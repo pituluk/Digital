@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
@@ -7,6 +8,7 @@ package de.neemann.digital.fsm.gui;
 
 import de.neemann.digital.FileLocator;
 import de.neemann.digital.analyse.TruthTable;
+import de.neemann.digital.analyse.TransitionTable;
 import de.neemann.digital.analyse.expression.ExpressionException;
 import de.neemann.digital.analyse.expression.format.FormatterException;
 import de.neemann.digital.core.*;
@@ -18,6 +20,7 @@ import de.neemann.digital.fsm.*;
 import de.neemann.digital.gui.*;
 import de.neemann.digital.gui.components.table.ShowStringDialog;
 import de.neemann.digital.gui.components.table.TableDialog;
+import de.neemann.digital.gui.components.table.TransitionTableDialog;
 import de.neemann.digital.lang.Lang;
 import de.neemann.gui.*;
 
@@ -37,7 +40,8 @@ import java.util.prefs.Preferences;
 /**
  * The dialog to show the FSM
  */
-public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSave, FSM.ModifiedListener, FileHistory.OpenInterface {
+public class FSMFrame extends JFrame
+        implements ClosingWindowListener.ConfirmSave, FSM.ModifiedListener, FileHistory.OpenInterface {
     private static final Preferences PREFS = Preferences.userRoot().node("dig").node("fsm");
     private static final String PREF_FOLDER = "folder";
     private static final Icon ICON_NEW = IconCreator.create("document-new.png");
@@ -57,6 +61,7 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
     private ToolTipAction save;
     private File filename;
     private File baseFilename;
+    private TableDialog parentTableDialog;
     private boolean lastModified;
     private String probeLabelName;
     private final GlobalValues.GlobalValueListener stateListener = new StateListener();
@@ -70,6 +75,41 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
         ElementLibrary library = new ElementLibrary();
         new ShapeFactory(library);
         SwingUtilities.invokeLater(() -> new FSMFrame(null, library, file).setVisible(true));
+    }
+
+    /**
+     * Creates a new instance
+     *
+     * @param parent  the parents window
+     * @param library the library used to show the table
+     */
+    public FSMFrame(Window parent, ElementLibrary library) {
+        this(parent, library, null);
+    }
+
+    /**
+     * Creates a new instance
+     *
+     * @param parent   the parents window
+     * @param library  the library used to show the table
+     * @param filename the file to open
+     */
+    public FSMFrame(Window parent, ElementLibrary library, File filename) {
+        this(parent instanceof JFrame ? (JFrame) parent : null, library, filename);
+        if (parent instanceof TableDialog) {
+            this.parentTableDialog = (TableDialog) parent;
+        }
+    }
+
+    /**
+     * Sets the parent TableDialog for synthesis integration.
+     *
+     * @param parentTableDialog caller TableDialog
+     * @return this for call chaining
+     */
+    public FSMFrame setParentTableDialog(TableDialog parentTableDialog) {
+        this.parentTableDialog = parentTableDialog;
+        return this;
     }
 
     /**
@@ -235,7 +275,6 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
         JMenu export = new JMenu(Lang.get("menu_export"));
         export.add(new ExportAction(Lang.get("menu_exportSVG"), "svg", GraphicSVG::new));
 
-
         JMenu file = new JMenu(Lang.get("menu_file"));
         bar.add(file);
         file.add(newFile.createJMenuItem());
@@ -250,10 +289,17 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
         toolBar.add(save.createJButtonNoText());
     }
 
-    private void setFSM(FSM fsm) {
+    /**
+     * Sets the FSM model to display and edit.
+     *
+     * @param fsm the FSM model
+     * @return this for call chaining
+     */
+    public FSMFrame setFSM(FSM fsm) {
         this.fsm = fsm;
         fsmComponent.setFSM(fsm);
         fsm.setModifiedListener(this);
+        return this;
     }
 
     private JFileChooser getJFileChooser(File filename) {
@@ -360,7 +406,8 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
             }
         }.setAcceleratorCTRLplus("PLUS");
         // enable [+] which is SHIFT+[=] on english keyboard layout
-        fsmComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.CTRL_DOWN_MASK, false), zoomIn);
+        fsmComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.CTRL_DOWN_MASK, false),
+                zoomIn);
         fsmComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ADD, KeyEvent.CTRL_DOWN_MASK, false), zoomIn);
         fsmComponent.getActionMap().put(zoomIn, zoomIn);
 
@@ -371,7 +418,8 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
             }
         }.setAcceleratorCTRLplus("MINUS");
         // enable [+] which is SHIFT+[=] on english keyboard layout
-        fsmComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, KeyEvent.CTRL_DOWN_MASK, false), zoomOut);
+        fsmComponent.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, KeyEvent.CTRL_DOWN_MASK, false),
+                zoomOut);
         fsmComponent.getActionMap().put(zoomOut, zoomOut);
 
         toolBar.add(zoomIn.createJButtonNoText());
@@ -393,7 +441,25 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
             public void actionPerformed(ActionEvent actionEvent) {
                 try {
                     final TruthTable truthTable = fsm.createTruthTable(getStateSignalName());
-                    new TableDialog(FSMFrame.this, truthTable, library, filename).setOriginal(truthTable).setVisible(true);
+                    if (parentTableDialog != null) {
+                        parentTableDialog.setTruthTable(truthTable);
+                        parentTableDialog.toFront();
+                    } else {
+                        new TableDialog(FSMFrame.this, truthTable, library, filename).setOriginal(truthTable)
+                                .setVisible(true);
+                    }
+                } catch (Exception e) {
+                    new ErrorMessage(Lang.get("msg_fsmCantCreateTable")).addCause(e).show(FSMFrame.this);
+                }
+            }
+        }.createJMenuItem());
+
+        create.add(new ToolTipAction(Lang.get("menu_table_transitionTable")) {
+            @Override
+            public void actionPerformed(ActionEvent actionEvent) {
+                try {
+                    TransitionTable tt = TransitionTable.fromFSM(fsm);
+                    new TransitionTableDialog(FSMFrame.this, tt, library, parentTableDialog).setVisible(true);
                 } catch (Exception e) {
                     new ErrorMessage(Lang.get("msg_fsmCantCreateTable")).addCause(e).show(FSMFrame.this);
                 }
@@ -436,7 +502,8 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
                     try {
                         new OptimizerDialog(FSMFrame.this).setVisible(true);
                     } catch (FiniteStateMachineException | FormatterException | ExpressionException e) {
-                        new ErrorMessage(Lang.get("menu_fsm_optimize_state_numbers_err")).addCause(e).show(FSMFrame.this);
+                        new ErrorMessage(Lang.get("menu_fsm_optimize_state_numbers_err")).addCause(e)
+                                .show(FSMFrame.this);
                     } finally {
                         fsmComponent.repaint();
                     }
@@ -490,7 +557,6 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
         toolBar.add(viewHelp);
     }
 
-
     private class StateListener implements GlobalValues.GlobalValueListener {
         @Override
         public void valueCreated(String name, ObservableValue value, Model model) {
@@ -498,10 +564,9 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
                 value.addObserverToValue(() -> setActiveState(value.getValue()));
                 setActiveState(value.getValue());
                 model.addObserver(event -> {
-                            if (event == ModelEvent.CLOSED)
-                                setActiveState(-1);
-                        }, ModelEventType.CLOSED
-                );
+                    if (event == ModelEvent.CLOSED)
+                        setActiveState(-1);
+                }, ModelEventType.CLOSED);
             }
         }
     }
@@ -561,8 +626,7 @@ public class FSMFrame extends JFrame implements ClosingWindowListener.ConfirmSav
                                 fsm.drawTo(gr);
                             }
                         }
-                    }
-            );
+                    });
         }
 
     }
