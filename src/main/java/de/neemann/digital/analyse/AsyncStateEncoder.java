@@ -270,10 +270,12 @@ public class AsyncStateEncoder {
         // Variables: Q_{bits-1}^n .. Q_0^n, then primary inputs
         ArrayList<Variable> vars = new ArrayList<>();
         ArrayList<String> stateVarNames = new ArrayList<>();
+        for (int i = 0; i < stateBits; i++) {
+            stateVarNames.add(prefix + "_" + i + "^n");
+        }
         for (int i = stateBits - 1; i >= 0; i--) {
             String vName = prefix + "_" + i + "^n";
             vars.add(new Variable(vName));
-            stateVarNames.add(vName);
         }
         for (String iv : sourceTable.getInputVars()) {
             vars.add(new Variable(iv));
@@ -322,25 +324,28 @@ public class AsyncStateEncoder {
                     long key = (((long) curCode) << 16) | col;
                     routingMap.put(key, nxtCode);
                 } else {
-                    // Find an unused code that reduces Hamming distance to 1
-                    int intermediate = -1;
                     int totalCodes = 1 << stateBits;
-                    for (int cand = 0; cand < totalCodes; cand++) {
-                        if (!usedCodes.contains(cand) && hammingDistance(curCode, cand) == 1 && hammingDistance(cand, nxtCode) == dist - 1) {
-                            intermediate = cand;
+                    int current = curCode;
+                    while (hammingDistance(current, nxtCode) > 1) {
+                        int currentDist = hammingDistance(current, nxtCode);
+                        int intermediate = -1;
+                        for (int cand = 0; cand < totalCodes; cand++) {
+                            if (!usedCodes.contains(cand) && hammingDistance(current, cand) == 1 && hammingDistance(cand, nxtCode) == currentDist - 1) {
+                                intermediate = cand;
+                                break;
+                            }
+                        }
+                        if (intermediate >= 0) {
+                            usedCodes.add(intermediate);
+                            long kStep = (((long) current) << 16) | col;
+                            routingMap.put(kStep, intermediate);
+                            current = intermediate;
+                        } else {
                             break;
                         }
                     }
-                    if (intermediate >= 0) {
-                        usedCodes.add(intermediate);
-                        long key1 = (((long) curCode) << 16) | col;
-                        routingMap.put(key1, intermediate);
-                        long key2 = (((long) intermediate) << 16) | col;
-                        routingMap.put(key2, nxtCode);
-                    } else {
-                        long key = (((long) curCode) << 16) | col;
-                        routingMap.put(key, nxtCode);
-                    }
+                    long kFinal = (((long) current) << 16) | col;
+                    routingMap.put(kFinal, nxtCode);
                 }
             }
         }
@@ -408,6 +413,7 @@ public class AsyncStateEncoder {
             }
         }
         mai.setStateSignalBitNames(stateVarNames);
+        mai.setStateSignalName(prefix);
         tt.setModelAnalyzerInfo(mai);
 
         return tt;

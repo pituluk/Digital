@@ -198,6 +198,9 @@ public class TransitionTable {
      * @return index of newly added state
      */
     public int addState(String name, int code) {
+        if (code < 0) {
+            return addState(name);
+        }
         states.add(new StateItem(name, code));
         rebuildMatrix();
         return states.size() - 1;
@@ -540,7 +543,12 @@ public class TransitionTable {
                 mai.setSequentialInitValue(varName, (initCode >> b) & 1);
             }
         }
-        mai.setStateSignalBitNames(maiNames);
+        ArrayList<String> stateSignalBits = new ArrayList<>();
+        for (int i = 0; i < stateBits; i++) {
+            stateSignalBits.add(stateVarPrefix + "_" + i + "^n");
+        }
+        mai.setStateSignalBitNames(stateSignalBits);
+        mai.setStateSignalName(stateVarPrefix);
         truthTable.setModelAnalyzerInfo(mai);
 
         return truthTable;
@@ -652,6 +660,9 @@ public class TransitionTable {
                     int val = tt.getValue(row, vars.size() + resIdx);
                     if (val != 2) {
                         transTable.setTransitionOutput(sCode, c, ovName, val);
+                        if (transTable.getState(sCode).getOutput(ovName) == null) {
+                            transTable.getState(sCode).setOutput(ovName, val);
+                        }
                     }
                 }
             }
@@ -785,8 +796,24 @@ public class TransitionTable {
         }
 
         TransitionTable tt = new TransitionTable(0, inVars, outVars);
+        int nextCode = 0;
+        java.util.HashSet<Integer> usedCodes = new java.util.HashSet<>();
         for (State s : fsmStates) {
-            int idx = tt.addState(s.getName(), s.getNumber());
+            if (s.getNumber() >= 0) {
+                usedCodes.add(s.getNumber());
+            }
+        }
+        for (int i = 0; i < fsmStates.size(); i++) {
+            State s = fsmStates.get(i);
+            int code = s.getNumber();
+            if (code < 0) {
+                while (usedCodes.contains(nextCode)) {
+                    nextCode++;
+                }
+                code = nextCode;
+                usedCodes.add(code);
+            }
+            int idx = tt.addState(s.getName(), code);
             // Set state (Moore) outputs: if a value is explicitly defined use it,
             // otherwise default to 0 (unless the state is marked as Don't Care)
             for (String ov : outVars) {

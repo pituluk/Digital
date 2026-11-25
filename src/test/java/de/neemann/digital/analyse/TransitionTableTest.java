@@ -292,4 +292,68 @@ public class TransitionTableTest extends TestCase {
         assertNotNull(circuit);
         assertTrue(circuit.getElements().size() > 0);
     }
+
+    public void testAllExampleFSMsConversion() throws Exception {
+        java.io.File examples = new java.io.File(de.neemann.digital.integration.Resources.getRoot().getParentFile().getParentFile(), "/main/fsm");
+        java.io.File[] files = examples.listFiles((dir, name) -> name.endsWith(".fsm"));
+        assertNotNull(files);
+        assertTrue(files.length > 0);
+
+        de.neemann.digital.draw.library.ElementLibrary library = new de.neemann.digital.draw.library.ElementLibrary();
+        de.neemann.digital.draw.shapes.ShapeFactory shapeFactory = new de.neemann.digital.draw.shapes.ShapeFactory(library);
+
+        for (java.io.File f : files) {
+            FSM fsm = FSM.loadFSM(f);
+            assertNotNull(fsm);
+            TransitionTable tt = TransitionTable.fromFSM(fsm);
+            assertNotNull(tt);
+            assertTrue(tt.getStateCount() > 0);
+
+            TruthTable truthTable = tt.toTruthTable();
+            assertNotNull(truthTable);
+            assertTrue(truthTable.getRows() > 0);
+
+            de.neemann.digital.gui.components.table.ExpressionListenerStore circuitExpressions =
+                    new de.neemann.digital.gui.components.table.ExpressionListenerStore(null);
+            for (int i = 0; i < truthTable.getResultCount(); i++) {
+                String rName = truthTable.getResultName(i);
+                new MinimizerQuineMcCluskey()
+                        .minimize(truthTable.getVars(), truthTable.getResult(i), rName, circuitExpressions);
+            }
+            circuitExpressions.close();
+
+            de.neemann.digital.builder.circuit.CircuitBuilder circuitBuilder =
+                    new de.neemann.digital.builder.circuit.CircuitBuilder(shapeFactory, truthTable.getVars())
+                            .setAsyncMode(de.neemann.digital.builder.circuit.CircuitBuilder.AsyncMode.NONE)
+                            .setModelAnalyzerInfo(truthTable.getModelAnalyzerInfo());
+
+            new de.neemann.digital.gui.components.table.BuilderExpressionCreator(circuitBuilder,
+                    de.neemann.digital.analyse.expression.modify.ExpressionModifier.IDENTITY)
+                    .create(circuitExpressions);
+
+            de.neemann.digital.draw.elements.Circuit circuit = circuitBuilder.createCircuit();
+            assertNotNull("Circuit generated for " + f.getName() + " should not be null", circuit);
+            assertTrue("Circuit for " + f.getName() + " should have elements", circuit.getElements().size() > 0);
+
+            // Also compare with original FSM.createTruthTable
+            TruthTable originalTT = fsm.createTruthTable(null);
+            assertEquals("Row count mismatch for " + f.getName(), originalTT.getRows(), truthTable.getRows());
+            for (int r = 0; r < originalTT.getRows(); r++) {
+                for (String resName : originalTT.getResultNames()) {
+                    int origResIdx = originalTT.getResultNames().indexOf(resName);
+                    // Match result in truthTable (account for Z vs Q prefix if state var)
+                    String matchingName = resName;
+                    if (resName.startsWith("Z_")) {
+                        matchingName = "Q_" + resName.substring(2);
+                    }
+                    int newResIdx = truthTable.getResultNames().indexOf(matchingName);
+                    assertTrue("Result " + matchingName + " should exist in new table for " + f.getName(), newResIdx >= 0);
+                    int origVal = originalTT.getValue(r, originalTT.getVars().size() + origResIdx);
+                    int newVal = truthTable.getValue(r, truthTable.getVars().size() + newResIdx);
+                    assertEquals("Mismatch at row " + r + " for result " + resName + " in " + f.getName(),
+                            origVal, newVal);
+                }
+            }
+        }
+    }
 }

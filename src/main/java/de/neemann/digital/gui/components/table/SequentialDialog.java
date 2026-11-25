@@ -288,6 +288,10 @@ public class SequentialDialog extends JDialog {
             truthTable.addResult(prefix + "_0^{n+1}", val);
             ModelAnalyserInfo mai = new ModelAnalyserInfo(null);
             mai.setSequentialInitValue(prefix + "_0^n", 0);
+            ArrayList<String> bitNames = new ArrayList<>();
+            bitNames.add(prefix + "_0^n");
+            mai.setStateSignalBitNames(bitNames);
+            mai.setStateSignalName(prefix);
             truthTable.setModelAnalyzerInfo(mai);
             return truthTable;
         }
@@ -312,6 +316,10 @@ public class SequentialDialog extends JDialog {
             truthTable.addResult(prefix + "_0^{n+1}", val);
             ModelAnalyserInfo mai = new ModelAnalyserInfo(null);
             mai.setSequentialInitValue(prefix + "_0^n", 0);
+            ArrayList<String> bitNames = new ArrayList<>();
+            bitNames.add(prefix + "_0^n");
+            mai.setStateSignalBitNames(bitNames);
+            mai.setStateSignalName(prefix);
             truthTable.setModelAnalyzerInfo(mai);
             return truthTable;
         }
@@ -414,9 +422,16 @@ public class SequentialDialog extends JDialog {
         }
 
         ModelAnalyserInfo mai = new ModelAnalyserInfo(null);
+        ArrayList<String> bitNames = new ArrayList<>();
+        // Ring and Johnson counters must start at state 1 (one-hot bit 0 high),
+        // since state 0 is invalid for these patterns.
+        int initState = (pattern == PatternType.RING || pattern == PatternType.JOHNSON) ? 1 : 0;
         for (int i = 0; i < n; i++) {
-            mai.setSequentialInitValue(prefix + "_" + i + "^n", 0);
+            mai.setSequentialInitValue(prefix + "_" + i + "^n", (initState >> i) & 1);
+            bitNames.add(prefix + "_" + i + "^n");
         }
+        mai.setStateSignalBitNames(bitNames);
+        mai.setStateSignalName(prefix);
         truthTable.setModelAnalyzerInfo(mai);
 
         return truthTable;
@@ -479,7 +494,11 @@ public class SequentialDialog extends JDialog {
 
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, actualTable.getVars())
                     .setAsyncMode(mode)
-                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo());
+                    .setResolveLocalVars(mode == CircuitBuilder.AsyncMode.FEEDBACK)
+                    .setPreserveSharedOutputPins(mode == CircuitBuilder.AsyncMode.FEEDBACK)
+                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo())
+                    .setCircuitAnnotation("Sequential Circuit: " + patternCombo.getSelectedItem()
+                            + "\nMode: " + modeCombo.getSelectedItem());
 
             ExpressionModifier modifier = ExpressionModifier.IDENTITY;
             PatternType p = getSelectedPattern();

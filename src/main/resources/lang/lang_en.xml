@@ -1962,6 +1962,8 @@
     <string name="menu_table_generate_tt">Generate Truth Table</string>
     <string name="menu_table_seq_mode">Synthesis Mode</string>
     <string name="menu_table_seq_mode_sync">Synchronous (with Clock)</string>
+    <string name="menu_table_seq_mode_sync_d">Synchronous: D Flip-Flops (clocked)</string>
+    <string name="menu_table_seq_mode_sync_jk">Synchronous: JK Flip-Flops (clocked)</string>
     <string name="menu_table_seq_mode_async_feedback">Asynchronous (Feedback loops)</string>
     <string name="menu_table_seq_mode_async_rs">Asynchronous (RS Latches)</string>
     <string name="menu_table_seq_pattern">Sequence Pattern</string>
@@ -1994,6 +1996,12 @@
     <string name="msg_enter_output_name">Enter output variable name</string>
     <string name="tab_sequential">Sequential Circuits</string>
     <string name="btn_sequential_help">How to Use / Guide</string>
+    <string name="btn_seq_preview_equations">Preview Equations</string>
+    <string name="btn_seq_preview_equations_tt">Shows state encoding, excitation equations (D/JK/RS) and output functions.</string>
+    <string name="msg_seq_preview_title">Sequential Synthesis Preview</string>
+    <string name="msg_seq_state_encoding">State Encoding</string>
+    <string name="msg_seq_excitation_equations">Excitation Equations</string>
+    <string name="msg_seq_output_equations">Output Equations</string>
     <string name="btn_load_preset">Load Preset</string>
     <string name="btn_sync_truth_table">Sync to Truth Table</string>
     <string name="menu_table_hazard_free">Hazard-Free (Complete Sum)</string>
@@ -2059,8 +2067,23 @@
 <h3>5. Circuit Synthesis</h3>
 <ul>
   <li><b>Sync to Truth Table:</b> Converts the transition table to the combinatorial table tab so you can view Karnaugh maps and minimal boolean expressions.</li>
-  <li><b>Create Circuit:</b> Directly synthesizes the circuit schematic. In Asynchronous (Feedback) mode, cross-coupled gates and feedback tunnels are generated without a clock.</li>
+  <li><b>Preview Equations:</b> Inspect the state assignment, D / JK / RS excitation equations, and output functions before generating the schematic.</li>
+  <li><b>Create Circuit:</b> Synthesizes the schematic according to the selected mode (D Flip-Flops, JK Flip-Flops, RS Latches, or Feedback loops).</li>
   <li><b>Simulation:</b> Press the green <b>Play</b> button in Digital's toolbar to simulate the circuit and interactively flip input switches!</li>
+</ul>
+
+<h3>6. Sequence Pattern Presets</h3>
+<ul>
+  <li><b>SR Latch (NOR: S, R):</b> 1-bit asynchronous latch with cross-coupled NOR gates. Active-high inputs S (Set) and R (Reset). Prohibited condition: S=R=1.</li>
+  <li><b>~S~R Latch (NAND: /S, /R):</b> 1-bit asynchronous latch with cross-coupled NAND gates. Active-low inputs /S (Set) and /R (Reset). Prohibited condition: /S=/R=0.</li>
+  <li><b>Binary Counter Up:</b> N-bit synchronous up counter that counts through 0, 1, 2, ..., 2^N - 1 and wraps around.</li>
+  <li><b>Binary Counter Down:</b> N-bit synchronous down counter that counts through 2^N - 1, ..., 1, 0 and wraps around.</li>
+  <li><b>Binary Counter Up/Down (with D):</b> Direction-controlled counter. Input D=1 counts up, D=0 counts down.</li>
+  <li><b>Gray Code Counter (Race-Free):</b> Single-bit transition counter where every step changes exactly one flip-flop (Hamming distance = 1), avoiding race hazards.</li>
+  <li><b>Gray Code Up/Down (with D):</b> Bidirectional Gray code counter with single-bit transitions in both counting directions.</li>
+  <li><b>Ring Counter (One-Hot):</b> Circulates a single active bit ('1') through N flip-flops: 001 &rarr; 010 &rarr; 100 &rarr; 001. Requires no external decoding gates.</li>
+  <li><b>Johnson Counter (Twisted Ring):</b> Shift register with inverted output fed back to input. Provides 2N states for N flip-flops with adjacent states differing by at most 1 bit.</li>
+  <li><b>Custom Sequence:</b> Generates a state machine following any comma-separated state order (e.g. <code>0, 2, 5, 7</code>).</li>
 </ul>
 </body>
 </html>]]></string>

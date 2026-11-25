@@ -97,6 +97,8 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
     private boolean wideShapes;
     private boolean useSwitchesAndLeds;
     private boolean preserveSharedOutputPins;
+    private boolean forceJK;
+    private String circuitAnnotation;
 
 
     /**
@@ -164,6 +166,28 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
      */
     public CircuitBuilder setUseJK(boolean useJKff) {
         this.useJKff = useJKff;
+        return this;
+    }
+
+    /**
+     * Forces the usage of JK flip-flops even if an equivalent D flip-flop would be simpler.
+     *
+     * @param forceJK true to force JK flip-flops
+     * @return this for chained calls
+     */
+    public CircuitBuilder setForceJK(boolean forceJK) {
+        this.forceJK = forceJK;
+        return this;
+    }
+
+    /**
+     * Sets an informative text annotation to be placed on the generated circuit.
+     *
+     * @param circuitAnnotation description text
+     * @return this for chained calls
+     */
+    public CircuitBuilder setCircuitAnnotation(String circuitAnnotation) {
+        this.circuitAnnotation = circuitAnnotation;
         return this;
     }
 
@@ -383,7 +407,7 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
         if (useJKff) {
             try {
                 DetermineJKStateMachine jk = new DetermineJKStateMachine(name, expression);
-                useDff = jk.isDFF();
+                useDff = !forceJK && jk.isDFF();
                 if (!useDff) {
                     boolean isJequalK = new Equals(jk.getSimplifiedJ(), jk.getSimplifiedK()).isEqual();
                     Fragment frJ = createFragment(jk.getSimplifiedJ());
@@ -751,6 +775,14 @@ public class CircuitBuilder implements BuilderInterface<CircuitBuilder> {
             final String stateVariableName = mai.getStateSignalName();
             if (stateVariableName != null)
                 outSplitterY = createStateVar(maxWidth + SIZE * 15, outSplitterY, circuit, stateVariableName, mai.getStateSignalBitNames());
+        }
+
+        if (circuitAnnotation != null && !circuitAnnotation.isEmpty()) {
+            VisualElement ve = new VisualElement(de.neemann.digital.gui.components.data.DummyElement.TEXTDESCRIPTION.getName())
+                    .setShapeFactory(shapeFactory)
+                    .setAttribute(Keys.DESCRIPTION, circuitAnnotation)
+                    .setPos(new Vector(maxWidth + SIZE * 16, -SIZE * 7));
+            circuit.add(ve);
         }
 
         return circuit;

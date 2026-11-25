@@ -243,7 +243,10 @@ public class TransitionTableDialog extends JDialog {
                     .setAsyncMode(mode)
                     .setResolveLocalVars(mode == CircuitBuilder.AsyncMode.FEEDBACK)
                     .setPreserveSharedOutputPins(mode == CircuitBuilder.AsyncMode.FEEDBACK)
-                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo());
+                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo())
+                    .setCircuitAnnotation(transitionTable.isAsync()
+                            ? "Sequential Circuit: Asynchronous Feedback\nTunnels: Cross-coupled feedback loops\nTiming: Continuous-time (unclocked)"
+                            : "Sequential Circuit: Synchronous (D Flip-Flops)\nFlip-Flops: FlipflopD with clock\nClock: Connect Clock to C input");
 
             new BuilderExpressionCreator(circuitBuilder, ExpressionModifier.IDENTITY)
                     .create(circuitExpressions);
@@ -275,9 +278,10 @@ public class TransitionTableDialog extends JDialog {
 
             ShapeFactory shapeFactory = new ShapeFactory(library);
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, srTable.getVars())
-                    .setAsyncMode(CircuitBuilder.AsyncMode.NONE)
+                    .setAsyncMode(CircuitBuilder.AsyncMode.RS_LATCH)
                     .setHazardFree(true)
-                    .setModelAnalyzerInfo(srTable.getModelAnalyzerInfo());
+                    .setModelAnalyzerInfo(srTable.getModelAnalyzerInfo())
+                    .setCircuitAnnotation("Sequential Circuit: Critical Race-Free RS Latches\nEncoding: Adjacency-Preserving (Hamming dist <= 1)\nLatches: Unclocked FlipflopRSAsync\nHazard-Free: Enabled (Complete Sum)");
 
             int stateBits = encoder.getStateBits();
             String prefix = transitionTable.getStateVarPrefix();
@@ -397,6 +401,10 @@ public class TransitionTableDialog extends JDialog {
                 String outName = transitionTable.getOutputVars().get(columnIndex - 1);
                 if (valStr.equals("-") || valStr.equalsIgnoreCase("x") || valStr.isEmpty()) {
                     state.getOutputs().remove(outName);
+                } else if (valStr.equalsIgnoreCase("true") || valStr.equalsIgnoreCase("t") || valStr.equalsIgnoreCase("h") || valStr.equals("1")) {
+                    state.setOutput(outName, 1);
+                } else if (valStr.equalsIgnoreCase("false") || valStr.equalsIgnoreCase("f") || valStr.equalsIgnoreCase("l") || valStr.equals("0")) {
+                    state.setOutput(outName, 0);
                 } else {
                     try {
                         int num = Integer.parseInt(valStr);
@@ -409,7 +417,9 @@ public class TransitionTableDialog extends JDialog {
             }
 
             int inCol = columnIndex - 1 - outCount;
-            if (valStr.startsWith("(") && valStr.endsWith(")")) {
+            if (valStr.startsWith("[") && valStr.endsWith("]")) {
+                valStr = valStr.substring(1, valStr.length() - 1).trim();
+            } else if (valStr.startsWith("(") && valStr.endsWith(")")) {
                 valStr = valStr.substring(1, valStr.length() - 1).trim();
             }
 
@@ -466,37 +476,76 @@ public class TransitionTableDialog extends JDialog {
     }
 
     private class TransitionCellEditor extends AbstractCellEditor implements TableCellEditor {
-        private final JComboBox<String> comboBox = new JComboBox<>();
+        private final JComboBox<String> stateCombo = new JComboBox<>();
+        private final JComboBox<String> outputCombo = new JComboBox<>();
         private final JTextField textField = new JTextField();
-        private boolean useCombo;
+        private int editorType;
+
+        TransitionCellEditor() {
+            outputCombo.setEditable(true);
+            stateCombo.setEditable(true);
+        }
 
         @Override
         public Component getTableCellEditorComponent(JTable table, Object value,
                                                      boolean isSelected, int row, int column) {
             int outCount = transitionTable.getOutputVars().size();
-            if (column > outCount) {
-                useCombo = true;
-                comboBox.removeAllItems();
-                comboBox.addItem("-");
-                for (int i = 0; i < transitionTable.getStateCount(); i++) {
-                    comboBox.addItem(transitionTable.getState(i).getName());
+            String valStr = value == null ? "" : value.toString();
+
+            if (column == 0) {
+                editorType = 0;
+                int paren = valStr.indexOf('(');
+                if (paren > 0) {
+                    valStr = valStr.substring(0, paren).trim();
                 }
-                String valStr = value == null ? "-" : value.toString().replace("(", "").replace(")", "");
-                comboBox.setSelectedItem(valStr);
-                return comboBox;
-            } else {
-                useCombo = false;
-                textField.setText(value == null ? "" : value.toString());
+                textField.setText(valStr);
                 return textField;
+            } else if (column <= outCount) {
+                editorType = 1;
+                outputCombo.removeAllItems();
+                outputCombo.addItem("0");
+                outputCombo.addItem("1");
+                outputCombo.addItem("-");
+                outputCombo.setSelectedItem(valStr);
+                if (outputCombo.getEditor() != null && outputCombo.getEditor().getEditorComponent() instanceof JTextField) {
+                    JTextField tf = (JTextField) outputCombo.getEditor().getEditorComponent();
+                    tf.setText(valStr);
+                    tf.selectAll();
+                }
+                return outputCombo;
+            } else {
+                editorType = 2;
+                stateCombo.removeAllItems();
+                stateCombo.addItem("-");
+                for (int i = 0; i < transitionTable.getStateCount(); i++) {
+                    stateCombo.addItem(transitionTable.getState(i).getName());
+                }
+                if (valStr.startsWith("[") && valStr.endsWith("]")) {
+                    valStr = valStr.substring(1, valStr.length() - 1).trim();
+                } else if (valStr.startsWith("(") && valStr.endsWith(")")) {
+                    valStr = valStr.substring(1, valStr.length() - 1).trim();
+                }
+                stateCombo.setSelectedItem(valStr);
+                if (stateCombo.getEditor() != null && stateCombo.getEditor().getEditorComponent() instanceof JTextField) {
+                    JTextField tf = (JTextField) stateCombo.getEditor().getEditorComponent();
+                    tf.setText(valStr);
+                    tf.selectAll();
+                }
+                return stateCombo;
             }
         }
 
         @Override
         public Object getCellEditorValue() {
-            if (useCombo) {
-                return comboBox.getSelectedItem();
-            } else {
-                return textField.getText();
+            switch (editorType) {
+                case 0:
+                    return textField.getText();
+                case 1:
+                    Object outItem = outputCombo.isEditable() ? outputCombo.getEditor().getItem() : outputCombo.getSelectedItem();
+                    return outItem == null ? "" : outItem.toString();
+                default:
+                    Object stItem = stateCombo.isEditable() ? stateCombo.getEditor().getItem() : stateCombo.getSelectedItem();
+                    return stItem == null ? "" : stItem.toString();
             }
         }
     }

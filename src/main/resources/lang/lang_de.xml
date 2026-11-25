@@ -1980,6 +1980,8 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="menu_table_generate_tt">Wahrheitstabelle erzeugen</string>
     <string name="menu_table_seq_mode">Synthese-Modus</string>
     <string name="menu_table_seq_mode_sync">Synchron (mit Takt)</string>
+    <string name="menu_table_seq_mode_sync_d">Synchron: D-Flipflops (getaktet)</string>
+    <string name="menu_table_seq_mode_sync_jk">Synchron: JK-Flipflops (getaktet)</string>
     <string name="menu_table_seq_mode_async_feedback">Asynchron (Rückkopplung)</string>
     <string name="menu_table_seq_mode_async_rs">Asynchron (RS-Latches)</string>
     <string name="menu_table_seq_pattern">Muster</string>
@@ -2012,6 +2014,12 @@ Sind evtl. die Namen der Variablen nicht eindeutig?</string>
     <string name="msg_enter_output_name">Ausgangsnamen eingeben</string>
     <string name="tab_sequential">Sequentielle Schaltungen</string>
     <string name="btn_sequential_help">Anleitung / Hilfe</string>
+    <string name="btn_seq_preview_equations">Gleichungen anzeigen</string>
+    <string name="btn_seq_preview_equations_tt">Zeigt Zustandscodierung, Ansteuergleichungen (D/JK/RS) und Ausgangsfunktionen.</string>
+    <string name="msg_seq_preview_title">Vorschau der sequentiellen Synthese</string>
+    <string name="msg_seq_state_encoding">Zustandscodierung</string>
+    <string name="msg_seq_excitation_equations">Ansteuergleichungen</string>
+    <string name="msg_seq_output_equations">Ausgangsgleichungen</string>
     <string name="btn_load_preset">Muster laden</string>
     <string name="btn_sync_truth_table">Mit Wahrheitstabelle abgleichen</string>
     <string name="menu_table_hazard_free">Hazardfrei (Vollständige Summe)</string>

@@ -153,6 +153,7 @@ public class TableDialog extends JDialog {
     private ExpressionListenerStore lastGeneratedExpressions;
     private JMenuItem lastUsedGenratorMenuItem;
     private TruthTable originalExpressionTable;
+    private SequentialPanel sequentialPanel;
     private TruthTable simplifiedExpressionTable;
     private boolean showingSimplifiedExpressionTable;
     private boolean preservingExpressionTableViews;
@@ -340,7 +341,8 @@ public class TableDialog extends JDialog {
         resultsPanel.add(createExpressionResultsPanel());
         tablePanel.add(resultsPanel, BorderLayout.SOUTH);
         tabbedPane.addTab(Lang.get("win_table"), tablePanel);
-        tabbedPane.addTab(Lang.get("tab_sequential"), new SequentialPanel(this, library));
+        sequentialPanel = new SequentialPanel(this, library);
+        tabbedPane.addTab(Lang.get("tab_sequential"), sequentialPanel);
         return tabbedPane;
     }
 
@@ -977,6 +979,25 @@ public class TableDialog extends JDialog {
         }
     }
 
+    private String buildCircuitAnnotation(CircuitBuilder.AsyncMode asyncMode, boolean useJKff, boolean useLUTs, boolean use74xx) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(Lang.get("menu_table_createCircuit")).append(": ");
+        if (asyncMode == CircuitBuilder.AsyncMode.FEEDBACK) {
+            sb.append(Lang.get("menu_table_createCircuitAsyncFeedback"));
+        } else if (asyncMode == CircuitBuilder.AsyncMode.RS_LATCH) {
+            sb.append(Lang.get("menu_table_createCircuitAsyncRS"));
+        } else if (useJKff) {
+            sb.append(Lang.get("menu_table_createCircuitJK"));
+        } else if (useLUTs) {
+            sb.append(Lang.get("menu_table_createCircuitLUT"));
+        } else if (use74xx) {
+            sb.append(Lang.get("menu_table_createCircuit74xx"));
+        } else {
+            sb.append(Lang.get("menu_table_createCircuit"));
+        }
+        return sb.toString();
+    }
+
     private void createCircuit(ExpressionModifier... modifier) {
         createCircuit(false, false, false, modifier);
     }
@@ -992,15 +1013,18 @@ public class TableDialog extends JDialog {
                     createExpressionsForCreation(actualTable, deMorganExpression.isSelected() && !use74xx);
 
             final ModelAnalyserInfo modelAnalyzerInfo = actualTable.getModelAnalyzerInfo();
+            String annotation = buildCircuitAnnotation(asyncMode, useJKff, useLUTs, use74xx);
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, actualTable.getVars())
                     .setAsyncMode(asyncMode)
                     .setUseJK(useJKff)
+                    .setForceJK(useJKff)
                     .setUseLUTs(useLUTs)
                     .setUse74xx(use74xx)
                     .setResolveLocalVars(deMorganExpression.isSelected())
                     .setPreserveSharedOutputPins(deMorganExpression.isSelected())
                     .setUseSwitchesAndLeds(useSwitchesAndLeds != null && useSwitchesAndLeds.isSelected())
-                    .setModelAnalyzerInfo(modelAnalyzerInfo);
+                    .setModelAnalyzerInfo(modelAnalyzerInfo)
+                    .setCircuitAnnotation(annotation);
             new BuilderExpressionCreator(circuitBuilder, modifier)
                     .setUseJKOptimizer(useJKff)
                     .create(circuitExpressions);
@@ -1027,6 +1051,18 @@ public class TableDialog extends JDialog {
         undoManager.setInitial(truthTable);
         model.setOriginal(null);
         tableChanged();
+        if (sequentialPanel != null && truthTable != null) {
+            boolean hasSeq = false;
+            for (String rName : truthTable.getResultNames()) {
+                if (ExpressionListenerJK.isSequentialVar(rName) != null) {
+                    hasSeq = true;
+                    break;
+                }
+            }
+            if (hasSeq) {
+                sequentialPanel.updateFromTruthTable(truthTable);
+            }
+        }
     }
 
     /**

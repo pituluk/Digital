@@ -6,15 +6,20 @@
  */
 package de.neemann.digital.gui.components.table;
 
+import de.neemann.digital.analyse.AsynchronousLatchAnalyzer;
 import de.neemann.digital.analyse.AsyncStateEncoder;
+import de.neemann.digital.analyse.DetermineJKStateMachine;
 import de.neemann.digital.analyse.MinimizerQuineMcCluskey;
 import de.neemann.digital.analyse.TransitionTable;
 import de.neemann.digital.analyse.TruthTable;
 import de.neemann.digital.analyse.expression.Constant;
 import de.neemann.digital.analyse.expression.Expression;
+import de.neemann.digital.analyse.expression.Not;
+import de.neemann.digital.analyse.expression.format.FormatToExpression;
 import de.neemann.digital.analyse.expression.modify.ExpressionModifier;
 import de.neemann.digital.analyse.expression.modify.NAnd;
 import de.neemann.digital.analyse.expression.modify.NOr;
+import de.neemann.digital.analyse.quinemc.QuineMcCluskey;
 import de.neemann.digital.builder.circuit.CircuitBuilder;
 import de.neemann.digital.draw.elements.Circuit;
 import de.neemann.digital.draw.library.ElementLibrary;
@@ -22,6 +27,7 @@ import de.neemann.digital.draw.shapes.ShapeFactory;
 import de.neemann.digital.fsm.FSM;
 import de.neemann.digital.fsm.gui.FSMFrame;
 import de.neemann.digital.gui.Main;
+import de.neemann.digital.gui.components.ShowStringDialog;
 import de.neemann.digital.lang.Lang;
 import de.neemann.gui.ErrorMessage;
 import de.neemann.gui.ToolTipAction;
@@ -85,7 +91,8 @@ public class SequentialPanel extends JPanel {
                 Lang.get("menu_table_seq_mode_async_feedback"),
                 Lang.get("menu_table_seq_mode_async_rs"),
                 Lang.get("menu_table_async_race_free"),
-                Lang.get("menu_table_seq_mode_sync")
+                Lang.get("menu_table_seq_mode_sync_d"),
+                Lang.get("menu_table_seq_mode_sync_jk")
         });
         configRow.add(modeCombo);
 
@@ -137,7 +144,12 @@ public class SequentialPanel extends JPanel {
         presetDescription.setBorder(BorderFactory.createEmptyBorder(0, 8, 2, 8));
         topPanel.add(presetDescription);
 
-        patternCombo.addActionListener(e -> updatePresetDescription());
+        patternCombo.addActionListener(e -> {
+            int pIdx = patternCombo.getSelectedIndex();
+            bitsSpinner.setEnabled(pIdx >= 2);
+            updatePresetDescription();
+        });
+        bitsSpinner.setEnabled(patternCombo.getSelectedIndex() >= 2);
         updatePresetDescription();
 
         topPanel.add(createEditToolBar());
@@ -152,6 +164,14 @@ public class SequentialPanel extends JPanel {
             }
         });
         bottomPanel.add(btnGraph);
+
+        JButton btnPreview = new JButton(new ToolTipAction(Lang.get("btn_seq_preview_equations")) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showEquationsPreview();
+            }
+        }.setToolTip(Lang.get("btn_seq_preview_equations_tt")));
+        bottomPanel.add(btnPreview);
 
         JButton btnSyncTruthTable = new JButton(new ToolTipAction(Lang.get("btn_sync_truth_table")) {
             @Override
@@ -271,32 +291,53 @@ public class SequentialPanel extends JPanel {
         switch (idx) {
             case 0:
                 pattern = SequentialDialog.PatternType.SR_LATCH_NOR;
-                modeCombo.setSelectedIndex(0); // Async feedback
+                modeCombo.setSelectedIndex(1); // Async RS Latch
                 break;
             case 1:
                 pattern = SequentialDialog.PatternType.SR_LATCH_NAND;
-                modeCombo.setSelectedIndex(0); // Async feedback
+                modeCombo.setSelectedIndex(1); // Async RS Latch
                 break;
             case 2:
                 pattern = SequentialDialog.PatternType.GRAY_CODE;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 3:
                 pattern = SequentialDialog.PatternType.GRAY_CODE_BIDIR;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 4:
                 pattern = SequentialDialog.PatternType.BINARY_UP;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 5:
                 pattern = SequentialDialog.PatternType.BINARY_DOWN;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 6:
                 pattern = SequentialDialog.PatternType.BINARY_UP_DOWN;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 7:
                 pattern = SequentialDialog.PatternType.RING;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             case 8:
                 pattern = SequentialDialog.PatternType.JOHNSON;
+                if (modeCombo.getSelectedIndex() < 3) {
+                    modeCombo.setSelectedIndex(3);
+                }
                 break;
             default:
                 pattern = SequentialDialog.PatternType.CUSTOM;
@@ -349,7 +390,7 @@ public class SequentialPanel extends JPanel {
                 desc = Lang.get("menu_table_pattern_custom_desc");
                 break;
         }
-        presetDescription.setText(desc);
+        presetDescription.setText("<html><b>" + Lang.get("menu_table_seq_pattern") + ":</b> " + desc + "</html>");
     }
 
     /**
@@ -404,6 +445,7 @@ public class SequentialPanel extends JPanel {
 
         try {
             boolean isHazardFree = hazardFreeCheckBox != null && hazardFreeCheckBox.isSelected();
+            boolean useJK = (mIdx == 4);
             TruthTable actualTable = transitionTable.toTruthTable();
             ExpressionListenerStore circuitExpressions = new ExpressionListenerStore(null);
             for (int i = 0; i < actualTable.getResultCount(); i++) {
@@ -426,10 +468,13 @@ public class SequentialPanel extends JPanel {
 
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, actualTable.getVars())
                     .setAsyncMode(mode)
+                    .setUseJK(useJK)
+                    .setForceJK(useJK)
                     .setHazardFree(isHazardFree)
                     .setResolveLocalVars(mode == CircuitBuilder.AsyncMode.FEEDBACK)
                     .setPreserveSharedOutputPins(mode == CircuitBuilder.AsyncMode.FEEDBACK)
-                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo());
+                    .setModelAnalyzerInfo(actualTable.getModelAnalyzerInfo())
+                    .setCircuitAnnotation(buildCircuitAnnotation(mIdx, isHazardFree));
 
             ExpressionModifier modifier = ExpressionModifier.IDENTITY;
             int pIdx = patternCombo.getSelectedIndex();
@@ -440,6 +485,7 @@ public class SequentialPanel extends JPanel {
             }
 
             new BuilderExpressionCreator(circuitBuilder, modifier)
+                    .setUseJKOptimizer(useJK)
                     .create(circuitExpressions);
 
             Circuit circuit = circuitBuilder.createCircuit();
@@ -470,9 +516,10 @@ public class SequentialPanel extends JPanel {
 
             ShapeFactory shapeFactory = new ShapeFactory(library != null ? library : new de.neemann.digital.draw.library.ElementLibrary());
             CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory, srTable.getVars())
-                    .setAsyncMode(CircuitBuilder.AsyncMode.NONE)
+                    .setAsyncMode(CircuitBuilder.AsyncMode.RS_LATCH)
                     .setHazardFree(isHazardFree)
-                    .setModelAnalyzerInfo(srTable.getModelAnalyzerInfo());
+                    .setModelAnalyzerInfo(srTable.getModelAnalyzerInfo())
+                    .setCircuitAnnotation(buildCircuitAnnotation(2, isHazardFree));
 
             int stateBits = encoder.getStateBits();
             String prefix = transitionTable.getStateVarPrefix();
@@ -506,6 +553,222 @@ public class SequentialPanel extends JPanel {
                     .openLater();
         } catch (Exception e) {
             new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
+        }
+    }
+
+    private String buildCircuitAnnotation(int mIdx, boolean isHazardFree) {
+        StringBuilder sb = new StringBuilder();
+        int stateBits = transitionTable.getStateBits();
+        String prefix = transitionTable.getStateVarPrefix();
+        if (prefix == null || prefix.isEmpty()) {
+            prefix = "Q";
+        }
+
+        switch (mIdx) {
+            case 0:
+                sb.append("Sequential Circuit: Asynchronous Feedback\n");
+                sb.append("Tunnels: Cross-coupled feedback loops\n");
+                sb.append("Timing: Continuous-time (unclocked)\n");
+                break;
+            case 1:
+                sb.append("Sequential Circuit: Asynchronous RS Latches\n");
+                sb.append("Latches: Unclocked FlipflopRSAsync\n");
+                sb.append("Synthesis: Shannon Decomposition\n");
+                break;
+            case 2:
+                sb.append("Sequential Circuit: Critical Race-Free RS Latches\n");
+                sb.append("Encoding: Adjacency-Preserving (Hamming dist <= 1)\n");
+                sb.append("Latches: Unclocked FlipflopRSAsync\n");
+                break;
+            case 4:
+                sb.append("Sequential Circuit: Synchronous (JK Flip-Flops)\n");
+                sb.append("Flip-Flops: FlipflopJK with clock\n");
+                sb.append("Clock: Connect Clock to C input\n");
+                break;
+            default:
+                sb.append("Sequential Circuit: Synchronous (D Flip-Flops)\n");
+                sb.append("Flip-Flops: FlipflopD with clock\n");
+                sb.append("Clock: Connect Clock to C input\n");
+                break;
+        }
+
+        sb.append("State Bits: ").append(stateBits).append(" (").append(prefix).append(")\n");
+        if (mIdx == 2) {
+            AsyncStateEncoder enc = new AsyncStateEncoder(transitionTable);
+            for (int i = 0; i < transitionTable.getStateCount(); i++) {
+                sb.append(transitionTable.getState(i).getName()).append("=").append(Integer.toBinaryString(enc.getStateCode(i))).append(" ");
+            }
+            sb.append("\n");
+        }
+        if (isHazardFree) {
+            sb.append("Hazard-Free: Enabled (Complete Sum)\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private void showEquationsPreview() {
+        try {
+            int mIdx = modeCombo.getSelectedIndex();
+            boolean isHazardFree = hazardFreeCheckBox != null && hazardFreeCheckBox.isSelected();
+            StringBuilder sb = new StringBuilder();
+            String modeName;
+            switch (mIdx) {
+                case 0: modeName = Lang.get("menu_table_seq_mode_async_feedback"); break;
+                case 1: modeName = Lang.get("menu_table_seq_mode_async_rs"); break;
+                case 2: modeName = Lang.get("menu_table_async_race_free"); break;
+                case 4: modeName = Lang.get("menu_table_seq_mode_sync_jk"); break;
+                default: modeName = Lang.get("menu_table_seq_mode_sync_d"); break;
+            }
+
+            sb.append("==================================================\n");
+            sb.append(Lang.get("msg_seq_preview_title")).append("\n");
+            sb.append(Lang.get("menu_table_seq_mode")).append(": ").append(modeName).append("\n");
+            sb.append(Lang.get("menu_table_hazard_free")).append(": ").append(isHazardFree ? "true" : "false").append("\n");
+            sb.append("==================================================\n\n");
+
+            if (mIdx == 2) {
+                appendRaceFreePreview(sb, isHazardFree);
+            } else {
+                appendStandardPreview(sb, mIdx, isHazardFree);
+            }
+
+            new ShowStringDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    Lang.get("msg_seq_preview_title"),
+                    sb.toString(),
+                    false
+            ).setVisible(true);
+        } catch (Exception e) {
+            new ErrorMessage(Lang.get("msg_errorDuringCalculation")).addCause(e).show(this);
+        }
+    }
+
+    private void appendRaceFreePreview(StringBuilder sb, boolean isHazardFree) throws Exception {
+        AsyncStateEncoder encoder = new AsyncStateEncoder(transitionTable);
+        sb.append("[").append(Lang.get("msg_seq_state_encoding")).append("]\n");
+        for (int i = 0; i < transitionTable.getStateCount(); i++) {
+            TransitionTable.StateItem s = transitionTable.getState(i);
+            int code = encoder.getStateCode(i);
+            String bin = String.format("%" + encoder.getStateBits() + "s", Integer.toBinaryString(code)).replace(' ', '0');
+            sb.append(String.format("  %-10s = %s\n", s.getName(), bin));
+        }
+        sb.append("\n");
+
+        TruthTable srTable = encoder.generateSRExcitationTable();
+        ExpressionListenerStore store = new ExpressionListenerStore(null);
+        for (int i = 0; i < srTable.getResultCount(); i++) {
+            String rName = srTable.getResultName(i);
+            new MinimizerQuineMcCluskey()
+                    .setHazardFree(isHazardFree)
+                    .minimize(srTable.getVars(), srTable.getResult(i), rName, store);
+        }
+        store.close();
+
+        sb.append("[").append(Lang.get("msg_seq_excitation_equations")).append(" (RS Latches)]\n");
+        for (ExpressionListenerStore.Result r : store.getResults()) {
+            if (r.getName().startsWith("S_") || r.getName().startsWith("R_")) {
+                sb.append(String.format("  %-12s = %s\n", r.getName(), FormatToExpression.defaultFormat(r.getExpression())));
+            }
+        }
+
+        if (!transitionTable.getOutputVars().isEmpty()) {
+            sb.append("\n[").append(Lang.get("msg_seq_output_equations")).append("]\n");
+            for (ExpressionListenerStore.Result r : store.getResults()) {
+                if (!r.getName().startsWith("S_") && !r.getName().startsWith("R_")) {
+                    sb.append(String.format("  %-12s = %s\n", r.getName(), FormatToExpression.defaultFormat(r.getExpression())));
+                }
+            }
+        }
+    }
+
+    private void appendStandardPreview(StringBuilder sb, int mIdx, boolean isHazardFree) throws Exception {
+        TruthTable actualTable = transitionTable.toTruthTable();
+        ExpressionListenerStore store = new ExpressionListenerStore(null);
+        for (int i = 0; i < actualTable.getResultCount(); i++) {
+            String rName = actualTable.getResultName(i);
+            new MinimizerQuineMcCluskey()
+                    .setHazardFree(isHazardFree)
+                    .minimize(actualTable.getVars(), actualTable.getResult(i), rName, store);
+        }
+        store.close();
+
+        sb.append("[").append(Lang.get("msg_seq_state_encoding")).append("]\n");
+        int stateBits = transitionTable.getStateBits();
+        for (int i = 0; i < transitionTable.getStateCount(); i++) {
+            TransitionTable.StateItem s = transitionTable.getState(i);
+            String bin = String.format("%" + stateBits + "s", Integer.toBinaryString(s.getCode())).replace(' ', '0');
+            sb.append(String.format("  %-10s = %s\n", s.getName(), bin));
+        }
+        sb.append("\n");
+
+        Map<String, Expression> exprMap = new HashMap<>();
+        for (ExpressionListenerStore.Result r : store.getResults()) {
+            exprMap.put(r.getName(), r.getExpression());
+        }
+
+        if (mIdx == 4) {
+            sb.append("[").append(Lang.get("msg_seq_excitation_equations")).append(" (JK Flip-Flops)]\n");
+            for (int k = stateBits - 1; k >= 0; k--) {
+                String nextName = transitionTable.getStateVarPrefix() + "_" + k + "^{n+1}";
+                String curName = transitionTable.getStateVarPrefix() + "_" + k + "^n";
+                Expression expr = exprMap.get(nextName);
+                if (expr != null) {
+                    DetermineJKStateMachine jk = new DetermineJKStateMachine(curName, expr);
+                    sb.append(String.format("  J_%-10s = %s\n", curName, FormatToExpression.defaultFormat(jk.getSimplifiedJ())));
+                    sb.append(String.format("  K_%-10s = %s\n", curName, FormatToExpression.defaultFormat(jk.getSimplifiedK())));
+                }
+            }
+        } else if (mIdx == 1) {
+            sb.append("[").append(Lang.get("msg_seq_excitation_equations")).append(" (RS Latches)]\n");
+            for (int k = stateBits - 1; k >= 0; k--) {
+                String nextName = transitionTable.getStateVarPrefix() + "_" + k + "^{n+1}";
+                String curName = transitionTable.getStateVarPrefix() + "_" + k + "^n";
+                Expression expr = exprMap.get(nextName);
+                if (expr != null) {
+                    Expression exprS = AsynchronousLatchAnalyzer.substitute(expr, curName, Constant.ZERO);
+                    Expression f1 = AsynchronousLatchAnalyzer.substitute(expr, curName, Constant.ONE);
+                    Expression exprR = Not.not(f1);
+                    if (isHazardFree) {
+                        exprS = new QuineMcCluskey(exprS).setHazardFree(true).simplify().getExpression();
+                        exprR = new QuineMcCluskey(exprR).setHazardFree(true).simplify().getExpression();
+                    } else {
+                        exprS = QuineMcCluskey.simplify(exprS);
+                        exprR = QuineMcCluskey.simplify(exprR);
+                    }
+                    sb.append(String.format("  S_%-10s = %s\n", curName, FormatToExpression.defaultFormat(exprS)));
+                    sb.append(String.format("  R_%-10s = %s\n", curName, FormatToExpression.defaultFormat(exprR)));
+                }
+            }
+        } else if (mIdx == 0) {
+            sb.append("[").append(Lang.get("msg_seq_excitation_equations")).append(" (Feedback Loops)]\n");
+            for (int k = stateBits - 1; k >= 0; k--) {
+                String nextName = transitionTable.getStateVarPrefix() + "_" + k + "^{n+1}";
+                String curName = transitionTable.getStateVarPrefix() + "_" + k + "^n";
+                Expression expr = exprMap.get(nextName);
+                if (expr != null) {
+                    sb.append(String.format("  %-12s = %s\n", curName, FormatToExpression.defaultFormat(expr)));
+                }
+            }
+        } else {
+            sb.append("[").append(Lang.get("msg_seq_excitation_equations")).append(" (D Flip-Flops)]\n");
+            for (int k = stateBits - 1; k >= 0; k--) {
+                String nextName = transitionTable.getStateVarPrefix() + "_" + k + "^{n+1}";
+                String curName = transitionTable.getStateVarPrefix() + "_" + k + "^n";
+                Expression expr = exprMap.get(nextName);
+                if (expr != null) {
+                    sb.append(String.format("  D_%-10s = %s\n", curName, FormatToExpression.defaultFormat(expr)));
+                }
+            }
+        }
+
+        if (!transitionTable.getOutputVars().isEmpty()) {
+            sb.append("\n[").append(Lang.get("msg_seq_output_equations")).append("]\n");
+            for (String ov : transitionTable.getOutputVars()) {
+                Expression expr = exprMap.get(ov);
+                if (expr != null) {
+                    sb.append(String.format("  %-12s = %s\n", ov, FormatToExpression.defaultFormat(expr)));
+                }
+            }
         }
     }
 
@@ -608,6 +871,10 @@ public class SequentialPanel extends JPanel {
                 String outName = transitionTable.getOutputVars().get(columnIndex - 1);
                 if (valStr.equals("-") || valStr.equalsIgnoreCase("x") || valStr.isEmpty()) {
                     state.getOutputs().remove(outName);
+                } else if (valStr.equalsIgnoreCase("true") || valStr.equalsIgnoreCase("t") || valStr.equalsIgnoreCase("h") || valStr.equals("1")) {
+                    state.setOutput(outName, 1);
+                } else if (valStr.equalsIgnoreCase("false") || valStr.equalsIgnoreCase("f") || valStr.equalsIgnoreCase("l") || valStr.equals("0")) {
+                    state.setOutput(outName, 0);
                 } else {
                     try {
                         int num = Integer.parseInt(valStr);
@@ -690,6 +957,11 @@ public class SequentialPanel extends JPanel {
         private final JTextField textField = new JTextField();
         private int editorType; // 0=textField (state name), 1=outputCombo, 2=stateCombo
 
+        TransitionCellEditor() {
+            outputCombo.setEditable(true);
+            stateCombo.setEditable(true);
+        }
+
         @Override
         public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
             int outCount = transitionTable.getOutputVars().size();
@@ -705,13 +977,18 @@ public class SequentialPanel extends JPanel {
                 textField.setText(valStr);
                 return textField;
             } else if (column <= outCount) {
-                // Output column: use combo with 0, 1, -
+                // Output column: use editable combo with 0, 1, -
                 editorType = 1;
                 outputCombo.removeAllItems();
                 outputCombo.addItem("0");
                 outputCombo.addItem("1");
                 outputCombo.addItem("-");
                 outputCombo.setSelectedItem(valStr);
+                if (outputCombo.getEditor() != null && outputCombo.getEditor().getEditorComponent() instanceof JTextField) {
+                    JTextField tf = (JTextField) outputCombo.getEditor().getEditorComponent();
+                    tf.setText(valStr);
+                    tf.selectAll();
+                }
                 return outputCombo;
             } else {
                 // Next state column: use combo with state names
@@ -727,6 +1004,11 @@ public class SequentialPanel extends JPanel {
                     valStr = valStr.substring(1, valStr.length() - 1).trim();
                 }
                 stateCombo.setSelectedItem(valStr);
+                if (stateCombo.getEditor() != null && stateCombo.getEditor().getEditorComponent() instanceof JTextField) {
+                    JTextField tf = (JTextField) stateCombo.getEditor().getEditorComponent();
+                    tf.setText(valStr);
+                    tf.selectAll();
+                }
                 return stateCombo;
             }
         }
@@ -734,9 +1016,14 @@ public class SequentialPanel extends JPanel {
         @Override
         public Object getCellEditorValue() {
             switch (editorType) {
-                case 0: return textField.getText();
-                case 1: return outputCombo.getSelectedItem();
-                default: return stateCombo.getSelectedItem();
+                case 0:
+                    return textField.getText();
+                case 1:
+                    Object outItem = outputCombo.isEditable() ? outputCombo.getEditor().getItem() : outputCombo.getSelectedItem();
+                    return outItem == null ? "" : outItem.toString();
+                default:
+                    Object stItem = stateCombo.isEditable() ? stateCombo.getEditor().getItem() : stateCombo.getSelectedItem();
+                    return stItem == null ? "" : stItem.toString();
             }
         }
     }

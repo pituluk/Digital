@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2016 Helmut Neemann
+ * Copyright (c) 2016 Helmut Neemann.
+ * Copyright (c) 2026 Łukasz Pituła.
  * Use of this source code is governed by the GPL v3 license
  * that can be found in the LICENSE file.
  */
 package de.neemann.digital.gui.components.expression;
 
+import de.neemann.digital.analyse.AsynchronousLatchAnalyzer;
 import de.neemann.digital.analyse.expression.Expression;
 import de.neemann.digital.analyse.expression.NamedExpression;
 import de.neemann.digital.analyse.expression.format.FormatToExpression;
@@ -91,6 +93,9 @@ public class ExpressionDialog extends JDialog {
         JCheckBox simplify = new JCheckBox(Lang.get("msg_simplifyExpression"));
         simplify.setToolTipText(Lang.get("msg_simplifyExpression_tt"));
         options.add(simplify);
+        JCheckBox hazardFree = new JCheckBox(Lang.get("menu_table_hazard_free"));
+        hazardFree.setToolTipText(Lang.get("menu_table_hazard_free_tt"));
+        options.add(hazardFree);
 
         JComboBox<CircuitVariant> variantPicker = createVariantPicker();
         options.add(new JLabel(Lang.get("menu_table_createCircuitMore") + ":"));
@@ -121,37 +126,54 @@ public class ExpressionDialog extends JDialog {
                         variant = variantPicker.getItemAt(0);
                     }
 
+                    boolean isHazardFree = hazardFree.isSelected();
                     CircuitBuilder circuitBuilder = new CircuitBuilder(shapeFactory)
                             .setResolveLocalVars(true)
+                            .setPreserveSharedOutputPins(true)
+                            .setHazardFree(isHazardFree)
                             .setUseLUTs(variant.useLUTs)
                             .setUse74xx(variant.use74xx)
                             .setUseSwitchesAndLeds(useSwitchesAndLeds.isSelected());
 
-                    if (expList.size() == 1) {
-                        Expression item = expList.get(0);
+                    boolean hasLatch = false;
+                    StringBuilder annotation = new StringBuilder();
+
+                    for (Expression item : expList) {
                         String name = "Y";
                         Expression exp = item;
                         if (item instanceof NamedExpression) {
                             name = ((NamedExpression) item).getName();
                             exp = ((NamedExpression) item).getExpression();
                         }
-                        if (simplify.isSelected())
-                            exp = QuineMcCluskey.simplify(exp);
-                        Expression modified = ExpressionModifier.modifyExpression(exp, variant.modifiers);
-                        circuitBuilder.addCombinatorial(name, modified);
-                    } else {
-                        for (Expression item : expList) {
-                            String name = FormatToExpression.defaultFormat(item);
-                            Expression exp = item;
-                            if (item instanceof NamedExpression) {
-                                name = ((NamedExpression) item).getName();
-                                exp = ((NamedExpression) item).getExpression();
+                        if (AsynchronousLatchAnalyzer.isSelfReferential(name, exp)) {
+                            hasLatch = true;
+                            AsynchronousLatchAnalyzer analyzer = new AsynchronousLatchAnalyzer(name, exp);
+                            Expression exprS = analyzer.getS();
+                            Expression exprR = analyzer.getR();
+                            if (simplify.isSelected() || isHazardFree) {
+                                exprS = new QuineMcCluskey(exprS).setHazardFree(isHazardFree).simplify().getExpression();
+                                exprR = new QuineMcCluskey(exprR).setHazardFree(isHazardFree).simplify().getExpression();
                             }
+                            circuitBuilder.setAsyncMode(CircuitBuilder.AsyncMode.RS_LATCH);
+                            circuitBuilder.addAsyncRSLatch(name, exprS, exprR);
+                            if (annotation.length() == 0) {
+                                annotation.append("Asynchronous RS Latch (Shannon Decomposition):\n");
+                            }
+                            annotation.append("- ").append(name).append(": S=").append(FormatToExpression.defaultFormat(exprS))
+                                    .append(", R=").append(FormatToExpression.defaultFormat(exprR)).append("\n");
+                        } else {
                             if (simplify.isSelected())
                                 exp = QuineMcCluskey.simplify(exp);
                             Expression modified = ExpressionModifier.modifyExpression(exp, variant.modifiers);
                             circuitBuilder.addCombinatorial(name, modified);
                         }
+                    }
+
+                    if (hasLatch) {
+                        if (isHazardFree) {
+                            annotation.append("- Hazard-Free: Enabled (Complete Sum)\n");
+                        }
+                        circuitBuilder.setCircuitAnnotation(annotation.toString().trim());
                     }
 
                     Circuit circuit = circuitBuilder.createCircuit();
